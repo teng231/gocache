@@ -7,6 +7,7 @@ import (
 	"time"
 )
 
+
 func TestGetPosition(t *testing.T) {
 	key := []byte("testkey")
 	numberOfShards := 100

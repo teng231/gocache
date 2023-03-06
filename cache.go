@@ -116,7 +116,7 @@ func (e *Engine) Pop() ([]byte, error) {
 	defer e.lock.Unlock()
 	key := e.keyhub.pop()
 	if key == nil {
-		return nil, errors.New("queue empty")
+		return nil, errors.New(E_queue_is_empty)
 	}
 	data, err := e.get(key)
 
@@ -127,7 +127,6 @@ func (e *Engine) Pop() ([]byte, error) {
 		return nil, err
 	}
 	e.delete(key)
-	log.Print(string(data), " ", e.keyhub.len())
 	return data, nil
 }
 func (e *Engine) delete(key []byte) error {

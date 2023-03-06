@@ -10,6 +10,22 @@ import (
 	"time"
 )
 
+func TestExpired(t *testing.T) {
+	engine, err := New(&Config{
+		TTL:         2 * time.Second,
+		Shard:       10,
+		CleanWindow: 1 * time.Second,
+	})
+
+	if err != nil {
+		panic(err)
+	}
+	log.Print("okeee")
+	engine.Set([]byte("key"), []byte("halo"))
+	time.Sleep(3 * time.Second)
+	out, err := engine.Get([]byte("key"))
+	log.Print(string(out), err)
+}
 func TestNormalCase(t *testing.T) {
 	engine, err := New(DefaultConfig())
 	if err != nil {
@@ -54,12 +70,12 @@ func TestPopDuplicate(t *testing.T) {
 	log.Print("okeee")
 	now := time.Now()
 	// log.Print(engine.Len(), " ")
-	buf := make(chan []byte, 40000)
+	buf := make(chan []byte, 1000000)
 
 	wg := &sync.WaitGroup{}
 	m := map[string]bool{}
 	mt := &sync.RWMutex{}
-	for i := 0; i < 200; i++ {
+	for i := 0; i < 300; i++ {
 		go func(i int) {
 			time.Sleep(time.Second)
 			for {
@@ -102,7 +118,7 @@ func TestPopHybrid(t *testing.T) {
 	wg := &sync.WaitGroup{}
 	m := map[string]bool{}
 	mt := &sync.RWMutex{}
-	for i := 0; i < 100; i++ {
+	for i := 0; i < 200; i++ {
 		go func(i int) {
 			time.Sleep(time.Second)
 			for {

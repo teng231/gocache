@@ -40,46 +40,47 @@ func (s *Shard) Purge() {
 }
 
 func (s *Shard) Upsert(key string, val *Item, ttl time.Duration) bool {
-	s.lock.Lock()
-	defer s.lock.Unlock()
 	isInsert := false
 	if !s.isExisted(key) {
 		atomic.AddInt64(&s.count, 1)
 		isInsert = true
 	}
+	s.lock.Lock()
 	s.keyTTL[key] = time.Now().Unix() + int64(ttl.Seconds())
 	s.data[key] = val
+	s.lock.Unlock()
 	return isInsert
 }
 
 func (s *Shard) Delete(key string) {
-	s.lock.Lock()
-	defer s.lock.Unlock()
+
 	if s.isExisted(key) {
 		atomic.AddInt64(&s.count, -1)
 	}
+	s.lock.Lock()
 	if s.onRemove != nil {
 		s.onRemove([]byte(key), s.data[key])
 	}
 	delete(s.data, key)
 	delete(s.keyTTL, key)
+	s.lock.Unlock()
 }
 
 func (s *Shard) isExisted(key string) bool {
-	// s.lock.RLock()
-	// defer s.lock.RUnlock()
+	s.lock.RLock()
 	_, has := s.data[key]
+	s.lock.RUnlock()
 	return has
 }
 
 func (s *Shard) Get(key string) (*Item, bool) {
-	s.lock.RLock()
-	defer s.lock.RUnlock()
 	if isExpired(s.keyTTL[key]) {
 		s.Delete(key)
 		return nil, false
 	}
+	s.lock.RLock()
 	item, has := s.data[key]
+	s.lock.RUnlock()
 	return item, has
 }
 
@@ -92,8 +93,6 @@ func (s *Shard) Iterator(f func(key string, val *Item)) {
 }
 
 func (s *Shard) iteratorExpire() {
-	s.lock.RLock()
-	defer s.lock.RUnlock()
 	for key, expireTime := range s.keyTTL {
 		if isExpired(expireTime) {
 			s.Delete(key)

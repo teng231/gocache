@@ -7,7 +7,7 @@ import (
 )
 
 func main() {
-	engine, err := cache.New(cache.DefaultConfig())
+	engine, err := gocache.New(gocache.DefaultConfig())
 	if err != nil {
 		panic(err)
 	}
