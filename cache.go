@@ -10,8 +10,6 @@ import (
 type Item struct {
 	Value []byte
 	Key   []byte
-	// created    int64
-	// expireTime time.Duration
 }
 
 type IEngine interface {
@@ -30,6 +28,18 @@ type Engine struct {
 	onRemove    func(key []byte, i *Item)
 	ttl         time.Duration
 	keyhub      *hub
+}
+
+func setRefresh(refreshDuration time.Duration, shardData []*Shard) {
+	tick := time.NewTicker(refreshDuration)
+	go func() {
+		for {
+			<-tick.C
+			for _, shard := range shardData {
+				shard.refresh()
+			}
+		}
+	}()
 }
 
 func setCleanWindow(cleanWindow time.Duration, shardData []*Shard) {
@@ -59,6 +69,7 @@ func New(cf *Config) (*Engine, error) {
 		shardData = append(shardData, initShard(cf.OnRemove))
 	}
 	setCleanWindow(cf.CleanWindow, shardData)
+	setRefresh(cf.CleanWindow, shardData)
 	return &Engine{
 		shardData:   shardData,
 		lock:        new(sync.RWMutex),
@@ -111,7 +122,6 @@ func (e *Engine) Get(key []byte) ([]byte, error) {
 }
 
 func (e *Engine) Pop() ([]byte, error) {
-	// log.Print(pos, " ", string(key))
 	e.lock.Lock()
 	defer e.lock.Unlock()
 	key := e.keyhub.pop()
@@ -119,10 +129,6 @@ func (e *Engine) Pop() ([]byte, error) {
 		return nil, errors.New(E_queue_is_empty)
 	}
 	data, err := e.get(key)
-
-	if data == nil && err == nil {
-		panic("shit")
-	}
 	if err != nil {
 		return nil, err
 	}

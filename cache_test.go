@@ -1,6 +1,7 @@
 package gocache
 
 import (
+	"fmt"
 	"log"
 	"runtime"
 	"runtime/debug"
@@ -200,4 +201,29 @@ func TestPopHybridWithGC(t *testing.T) {
 	}
 	log.Print("done gc")
 	time.Sleep(10 * time.Second)
+}
+func printAlloc() {
+	var m runtime.MemStats
+	runtime.ReadMemStats(&m)
+	fmt.Printf("%d Mb\n", m.Alloc/1024/1024)
+}
+func TestAlloc(t *testing.T) {
+	n := 1_000_000
+	m := make(map[int]*[128]byte)
+	printAlloc()
+
+	for i := 0; i < n; i++ { // Adds 1 million elements
+		x := [128]byte{}
+		m[i] = &x
+	}
+	printAlloc()
+
+	for i := 0; i < n; i++ { // Deletes 1 million elements
+		delete(m, i)
+	}
+
+	runtime.GC() // Triggers a manual GC
+	printAlloc()
+	runtime.KeepAlive(m) // Keeps a reference to m so that the map isn’t collected
+
 }

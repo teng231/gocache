@@ -10,17 +10,19 @@ func init() {
 }
 
 type Config struct {
-	Shard       int
-	OnRemove    func([]byte, *Item)
-	TTL         time.Duration
-	CleanWindow time.Duration
+	Shard        int
+	OnRemove     func([]byte, *Item)
+	TTL          time.Duration
+	CleanWindow  time.Duration
+	RefreshShard time.Duration
 }
 
 func DefaultConfig() *Config {
 	return &Config{
-		Shard:       256,
-		OnRemove:    nil,
-		CleanWindow: 5 * time.Minute,
-		TTL:         12 * time.Hour,
+		Shard:        256,
+		OnRemove:     nil,
+		CleanWindow:  5 * time.Minute,
+		TTL:          12 * time.Hour,
+		RefreshShard: 12*time.Hour + time.Minute,
 	}
 }

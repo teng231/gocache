@@ -2,6 +2,7 @@ package gocache
 
 import (
 	"hash/crc32"
+	"log"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -20,12 +21,28 @@ type Shard struct {
 }
 
 func initShard(onRemove func(key []byte, i *Item)) *Shard {
+
 	return &Shard{
 		data:     make(map[string]*Item),
 		lock:     new(sync.RWMutex),
 		keyTTL:   make(map[string]int64),
 		onRemove: onRemove,
 	}
+}
+
+func (s *Shard) refresh() {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	newData := make(map[string]*Item)
+	newKeyTTL := make(map[string]int64)
+	for k, v := range s.data {
+		newData[k] = v
+	}
+	for k, v := range s.keyTTL {
+		newKeyTTL[k] = v
+	}
+	s.data = newData
+	s.keyTTL = newKeyTTL
 }
 
 func (s *Shard) Count() int {
@@ -46,6 +63,7 @@ func (s *Shard) Upsert(key string, val *Item, ttl time.Duration) bool {
 		isInsert = true
 	}
 	s.lock.Lock()
+
 	s.keyTTL[key] = time.Now().Unix() + int64(ttl.Seconds())
 	s.data[key] = val
 	s.lock.Unlock()
@@ -68,18 +86,21 @@ func (s *Shard) Delete(key string) {
 
 func (s *Shard) isExisted(key string) bool {
 	s.lock.RLock()
-	_, has := s.data[key]
+	x := s.data
+	_, has := x[key]
 	s.lock.RUnlock()
 	return has
 }
 
 func (s *Shard) Get(key string) (*Item, bool) {
-	if isExpired(s.keyTTL[key]) {
+	y := (s.keyTTL)
+	if isExpired(y[key]) {
 		s.Delete(key)
 		return nil, false
 	}
 	s.lock.RLock()
-	item, has := s.data[key]
+	x := s.data
+	item, has := x[key]
 	s.lock.RUnlock()
 	return item, has
 }
@@ -98,4 +119,8 @@ func (s *Shard) iteratorExpire() {
 			s.Delete(key)
 		}
 	}
+}
+
+func (s *Shard) Info() {
+	log.Printf("count %d, len(data) %d, len(keyTTL) %d", s.count, len(s.data), len(s.keyTTL))
 }
