@@ -3,6 +3,7 @@ package gocache
 import (
 	"errors"
 	"log"
+	"runtime"
 	"sync"
 	"time"
 )
@@ -30,13 +31,17 @@ type Engine struct {
 	keyhub      *hub
 }
 
-func setRefresh(refreshDuration time.Duration, shardData []*Shard) {
+func setRefresh(refreshDuration time.Duration, isGC bool, shardData []*Shard) {
 	tick := time.NewTicker(refreshDuration)
 	go func() {
 		for {
 			<-tick.C
 			for _, shard := range shardData {
 				shard.refresh()
+			}
+			if isGC {
+				runtime.GC()
+				log.Print("GC started")
 			}
 		}
 	}()
@@ -69,7 +74,7 @@ func New(cf *Config) (*Engine, error) {
 		shardData = append(shardData, initShard(cf.OnRemove))
 	}
 	setCleanWindow(cf.CleanWindow, shardData)
-	setRefresh(cf.CleanWindow, shardData)
+	setRefresh(cf.CleanWindow, cf.IsManualGC, shardData)
 	return &Engine{
 		shardData:   shardData,
 		lock:        new(sync.RWMutex),
