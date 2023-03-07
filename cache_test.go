@@ -7,6 +7,7 @@ import (
 	"runtime/debug"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -76,13 +77,14 @@ func TestPopDuplicate(t *testing.T) {
 	wg := &sync.WaitGroup{}
 	m := map[string]bool{}
 	mt := &sync.RWMutex{}
+	var a int64 = 0
 	for i := 0; i < 300; i++ {
 		go func(i int) {
 			time.Sleep(time.Second)
 			for {
 				<-buf
-				data, err := engine.Pop()
-				log.Print(i, " ", string(data), err)
+				data, _ := engine.Pop()
+				// log.Print(i, " ", string(data), err)
 				mt.RLock()
 				_, has := m[string(data)]
 				if has {
@@ -93,6 +95,7 @@ func TestPopDuplicate(t *testing.T) {
 				m[string(data)] = true
 				mt.Unlock()
 				wg.Done()
+				atomic.AddInt64(&a, 1)
 			}
 		}(i)
 	}
@@ -103,7 +106,7 @@ func TestPopDuplicate(t *testing.T) {
 	}
 
 	wg.Wait()
-	log.Print(time.Since(now))
+	log.Print(time.Since(now), a)
 }
 
 func TestPopHybrid(t *testing.T) {
@@ -226,4 +229,53 @@ func TestAlloc(t *testing.T) {
 	printAlloc()
 	runtime.KeepAlive(m) // Keeps a reference to m so that the map isn’t collected
 
+}
+
+func TestAllocCache(t *testing.T) {
+	engine, _ := New(&Config{
+		Shard:        256,
+		OnRemove:     nil,
+		CleanWindow:  5 * time.Minute,
+		TTL:          12 * time.Hour,
+		RefreshShard: 12*time.Hour + time.Minute,
+		IsManualGC:   false,
+	})
+	n := 1_000_000
+	printAlloc()
+	for i := 0; i < n; i++ {
+		engine.Set([]byte(strconv.Itoa(i)), []byte(strconv.Itoa(i+1)))
+	}
+	printAlloc()
+
+	log.Print(engine.keyhub.len())
+	log.Print(engine.Len())
+	time.Sleep(time.Second)
+	now := time.Now()
+	wg := &sync.WaitGroup{}
+	wg.Add(100)
+	for i := 0; i < 100; i++ { // Deletes 1 million elements
+		go func() {
+			defer wg.Done()
+			for {
+				data, err := engine.Pop()
+				if err != nil && err.Error() == E_queue_is_empty {
+					break
+				}
+				if (data == nil) && err == nil {
+					panic("shit")
+				}
+				log.Print("'", string(data), "'")
+			}
+		}()
+	}
+	wg.Wait()
+	log.Print("--- ", time.Since(now))
+	printAlloc()
+	for _, shard := range engine.shardData {
+		shard.refresh()
+	}
+	runtime.GC()
+	printAlloc()
+
+	runtime.KeepAlive(engine) // Keeps a reference to m so that the map isn’t collected
 }

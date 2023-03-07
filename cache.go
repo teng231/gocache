@@ -81,7 +81,7 @@ func New(cf *Config) (*Engine, error) {
 		numberShard: cf.Shard,
 		onRemove:    cf.OnRemove,
 		ttl:         cf.TTL,
-		keyhub:      &hub{s: make([][]byte, 0)},
+		keyhub:      &hub{s: make([]*[]byte, 0)},
 	}, nil
 }
 
@@ -106,8 +106,8 @@ func (e *Engine) set(key []byte, value []byte) error {
 }
 
 func (e *Engine) Set(key []byte, value []byte) error {
-	e.lock.Lock()
-	defer e.lock.Unlock()
+	e.lock.RLock()
+	defer e.lock.RUnlock()
 	return e.set(key, value)
 }
 
@@ -133,13 +133,15 @@ func (e *Engine) Pop() ([]byte, error) {
 	if key == nil {
 		return nil, errors.New(E_queue_is_empty)
 	}
-	data, err := e.get(key)
-	if err != nil {
-		return nil, err
+	pos := getPosition(key, e.numberShard)
+	data, has := e.shardData[pos].Get(string(key))
+	if !has {
+		return nil, errors.New(E_not_found)
 	}
-	e.delete(key)
-	return data, nil
+	e.shardData[pos].Delete(string(key))
+	return data.Value, nil
 }
+
 func (e *Engine) delete(key []byte) error {
 	pos := getPosition(key, e.numberShard)
 	if isDel := e.keyhub.remove(key); isDel {
