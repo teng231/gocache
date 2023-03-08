@@ -16,6 +16,7 @@ type Config struct {
 	CleanWindow  time.Duration
 	RefreshShard time.Duration
 	IsManualGC   bool
+	Verbose      bool
 }
 
 func DefaultConfig() *Config {
@@ -26,5 +27,6 @@ func DefaultConfig() *Config {
 		TTL:          12 * time.Hour,
 		RefreshShard: 12*time.Hour + time.Minute,
 		IsManualGC:   true,
+		Verbose:      true,
 	}
 }

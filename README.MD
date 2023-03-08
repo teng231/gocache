@@ -13,3 +13,4 @@ go get github.com/teng231/gocache
 
 ## Refer
 - [https://teivah.medium.com/maps-and-memory-leaks-in-go-a85ebe6e7e69](https://teivah.medium.com/maps-and-memory-leaks-in-go-a85ebe6e7e69)
+- [https://github.com/golang/go/issues/35890](https://github.com/golang/go/issues/35890)

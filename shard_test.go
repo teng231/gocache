@@ -67,7 +67,27 @@ func TestAllocShard(t *testing.T) {
 	printAlloc()
 	for i := 0; i < n; i++ {
 		x := []byte(strconv.Itoa(i))
-		y := []byte(strconv.Itoa(i + 1))
+		y := []byte(`{
+			"id": 496,
+			"city": null,
+			"jobTitle": "network engineer",
+			"jobCategory": "engineer",
+			"jobFocus": null,
+			"level": null,
+			"yearOfExperience": 1,
+			"yearOfReceivedCompensation": "2023",
+			"monthlyBaseSalary": 9,
+			"annualExpectedBonus": 0,
+			"signingBonus": 0,
+			"bonusMemo": null,
+			"otherBenefits": null,
+			"createdAt": "2023-03-07T08:25:23.000Z",
+			"totalCompensation": 108,
+			"verified": false,
+			"companyId": 245,
+			"companyName": "CMC TSSG",
+			"companySlug": "cmc-tssg"
+		}`)
 		shard.Upsert(strconv.Itoa(i), &Item{
 			Key:   x,
 			Value: y,

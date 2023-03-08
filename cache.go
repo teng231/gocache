@@ -31,18 +31,20 @@ type Engine struct {
 	keyhub      *hub
 }
 
-func setRefresh(refreshDuration time.Duration, isGC bool, shardData []*Shard) {
+func printAlloc() {
+	m := &runtime.MemStats{}
+	runtime.ReadMemStats(m)
+	log.Printf("%d Mb HeapObject: %d HeapRelease: %d, HeapSys: %d", m.Alloc/1024/1024, m.HeapObjects, m.HeapReleased, m.HeapSys)
+	m = nil
+}
+
+func (e *Engine) setRefresh(refreshDuration time.Duration, isGC, verbose bool) {
 	tick := time.NewTicker(refreshDuration)
 	go func() {
 		for {
 			<-tick.C
-			for _, shard := range shardData {
-				shard.refresh()
-			}
-			if isGC {
-				runtime.GC()
-				log.Print("GC started")
-			}
+			e.lock.RLock()
+			e.Refresh(isGC, verbose)
 		}
 	}()
 }
@@ -74,17 +76,31 @@ func New(cf *Config) (*Engine, error) {
 		shardData = append(shardData, initShard(cf.OnRemove))
 	}
 	setCleanWindow(cf.CleanWindow, shardData)
-	setRefresh(cf.CleanWindow, cf.IsManualGC, shardData)
-	return &Engine{
+
+	engine := &Engine{
 		shardData:   shardData,
 		lock:        new(sync.RWMutex),
 		numberShard: cf.Shard,
 		onRemove:    cf.OnRemove,
 		ttl:         cf.TTL,
 		keyhub:      &hub{s: make([]*[]byte, 0)},
-	}, nil
+	}
+	engine.setRefresh(cf.CleanWindow, cf.IsManualGC, cf.Verbose)
+	return engine, nil
 }
-
+func (e *Engine) Refresh(isGC, verbose bool) {
+	for _, shard := range e.shardData {
+		shard.refresh()
+	}
+	if verbose {
+		printAlloc()
+		defer printAlloc()
+	}
+	if isGC {
+		runtime.GC()
+		log.Print("GC started")
+	}
+}
 func (e *Engine) Len() int {
 	count := 0
 	for _, i := range e.shardData {

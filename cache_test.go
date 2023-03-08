@@ -1,7 +1,6 @@
 package gocache
 
 import (
-	"fmt"
 	"log"
 	"runtime"
 	"runtime/debug"
@@ -205,13 +204,8 @@ func TestPopHybridWithGC(t *testing.T) {
 	log.Print("done gc")
 	time.Sleep(10 * time.Second)
 }
-func printAlloc() {
-	var m runtime.MemStats
-	runtime.ReadMemStats(&m)
-	fmt.Printf("%d Mb\n", m.Alloc/1024/1024)
-}
 func TestAlloc(t *testing.T) {
-	n := 1_000_000
+	n := 1_000_00
 	m := make(map[int]*[128]byte)
 	printAlloc()
 
@@ -243,7 +237,27 @@ func TestAllocCache(t *testing.T) {
 	n := 1_000_000
 	printAlloc()
 	for i := 0; i < n; i++ {
-		engine.Set([]byte(strconv.Itoa(i)), []byte(strconv.Itoa(i+1)))
+		engine.Set([]byte(strconv.Itoa(i)), []byte(`{
+			"id": 496,
+			"city": null,
+			"jobTitle": "network engineer",
+			"jobCategory": "engineer",
+			"jobFocus": null,
+			"level": null,
+			"yearOfExperience": 1,
+			"yearOfReceivedCompensation": "2023",
+			"monthlyBaseSalary": 9,
+			"annualExpectedBonus": 0,
+			"signingBonus": 0,
+			"bonusMemo": null,
+			"otherBenefits": null,
+			"createdAt": "2023-03-07T08:25:23.000Z",
+			"totalCompensation": 108,
+			"verified": false,
+			"companyId": 245,
+			"companyName": "CMC TSSG",
+			"companySlug": "cmc-tssg"
+		}`))
 	}
 	printAlloc()
 
@@ -264,18 +278,15 @@ func TestAllocCache(t *testing.T) {
 				if (data == nil) && err == nil {
 					panic("shit")
 				}
-				log.Print("'", string(data), "'")
+				// log.Print("'", string(data), "'")
 			}
 		}()
 	}
 	wg.Wait()
 	log.Print("--- ", time.Since(now))
 	printAlloc()
-	for _, shard := range engine.shardData {
-		shard.refresh()
-	}
-	runtime.GC()
-	printAlloc()
+	// engine.re
+	// printAlloc()
 
 	runtime.KeepAlive(engine) // Keeps a reference to m so that the map isn’t collected
 }
