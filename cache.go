@@ -34,7 +34,7 @@ type Engine struct {
 func printAlloc() {
 	m := &runtime.MemStats{}
 	runtime.ReadMemStats(m)
-	log.Printf("%d Mb HeapObject: %d HeapRelease: %d, HeapSys: %d", m.Alloc/1024/1024, m.HeapObjects, m.HeapReleased, m.HeapSys)
+	log.Printf("Alloc: %d Mb, Sys: %d, HeapObject: %d HeapRelease: %d, HeapSys: %d", m.Alloc/1024/1024, m.Sys/1024/1024, m.HeapObjects, m.HeapReleased, m.HeapSys)
 	m = nil
 }
 
