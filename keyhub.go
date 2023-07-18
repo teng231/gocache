@@ -1,7 +1,10 @@
 package gocache
 
+import "sync"
+
 type hub struct {
-	s []*string
+	s    []*string
+	lock *sync.RWMutex
 }
 
 func (h *hub) pop() string {
@@ -16,21 +19,26 @@ func (h *hub) pop() string {
 }
 
 func (h *hub) push(items ...string) {
+	h.lock.Lock()
+	defer h.lock.Unlock()
 	for _, item := range items {
 		h.s = append(h.s, &item)
 	}
 }
 
 func (h *hub) len() int {
+	// h.lock.RLock()
+	// defer h.lock.RUnlock()
 	return len(h.s)
 }
 
-func (k *hub) remove(key string) bool {
-	if k.len() == 0 {
+func (h *hub) remove(key string) bool {
+	if h.len() == 0 {
 		return true
 	}
 	index := -1
-	for i, val := range k.s {
+	h.lock.RLock()
+	for i, val := range h.s {
 		if val == nil {
 			continue
 		}
@@ -39,10 +47,13 @@ func (k *hub) remove(key string) bool {
 			break
 		}
 	}
+	h.lock.RUnlock()
 	if index != -1 {
-		copy(k.s[index:], k.s[index+1:])
-		k.s[len(k.s)-1] = nil  // Erase last element (write zero value).
-		k.s = k.s[:len(k.s)-1] // Truncate slice.
+		h.lock.Lock()
+		defer h.lock.Unlock()
+		copy(h.s[index:], h.s[index+1:])
+		h.s[len(h.s)-1] = nil  // Erase last element (write zero value).
+		h.s = h.s[:len(h.s)-1] // Truncate slice.
 		return true
 	}
 	return false

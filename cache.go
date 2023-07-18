@@ -16,7 +16,7 @@ type IEngine interface {
 	Len() int
 	Set(key string, value []byte) error
 	Get(key string) ([]byte, error)
-	Pop() ([]byte, error)
+	Pop() (string, []byte, error)
 	Delete(key string) error
 	Purge() error
 }
@@ -30,29 +30,17 @@ type Engine struct {
 	keyhub      *hub
 }
 
-func (e *Engine) setRefresh(refreshDuration time.Duration, verbose bool) {
-	tick := time.NewTicker(refreshDuration)
-	go func() {
-		for {
-			<-tick.C
-			e.lock.RLock()
-			// e.Refresh(verbose)
-			for _, shard := range e.shardData {
-				shard.refresh()
-			}
-			e.lock.RUnlock()
-		}
-	}()
-}
-
 func setCleanWindow(cleanWindow time.Duration, shardData []*Shard) {
 	tick := time.NewTicker(cleanWindow)
 	go func() {
 		for {
 			<-tick.C
 			for _, shard := range shardData {
+				shard.lock.RLock()
 				shard.iteratorExpire()
+				shard.lock.RUnlock()
 			}
+
 		}
 	}()
 }
@@ -79,9 +67,8 @@ func New(cf *Config) (*Engine, error) {
 		numberShard: cf.Shard,
 		onRemove:    cf.OnRemove,
 		ttl:         cf.TTL,
-		keyhub:      &hub{s: make([]*string, 0)},
+		keyhub:      &hub{s: make([]*string, 0), lock: &sync.RWMutex{}},
 	}
-	engine.setRefresh(cf.CleanWindow, cf.Verbose)
 	return engine, nil
 }
 
@@ -126,20 +113,20 @@ func (e *Engine) Get(key string) ([]byte, error) {
 	return e.get(key)
 }
 
-func (e *Engine) Pop() ([]byte, error) {
+func (e *Engine) Pop() (string, []byte, error) {
 	e.lock.Lock()
 	defer e.lock.Unlock()
 	key := e.keyhub.pop()
 	if key == "" {
-		return nil, errors.New(E_queue_is_empty)
+		return "", nil, errors.New(E_queue_is_empty)
 	}
 	pos := getPosition([]byte(key), e.numberShard)
 	data, has := e.shardData[pos].Get(key)
 	if !has {
-		return nil, errors.New(E_not_found)
+		return "", nil, errors.New(E_not_found)
 	}
 	e.shardData[pos].Delete(key)
-	return data.Value, nil
+	return key, data.Value, nil
 }
 
 func (e *Engine) delete(key string) error {
