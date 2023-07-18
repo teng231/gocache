@@ -1,16 +1,12 @@
 package gocache
 
-import (
-	"bytes"
-)
-
 type hub struct {
-	s []*[]byte
+	s []*string
 }
 
-func (h *hub) pop() []byte {
+func (h *hub) pop() string {
 	if h.len() == 0 {
-		return nil
+		return ""
 	}
 	// log.Print(h.s)
 	out := h.s[0]
@@ -19,7 +15,7 @@ func (h *hub) pop() []byte {
 	return *out
 }
 
-func (h *hub) push(items ...[]byte) {
+func (h *hub) push(items ...string) {
 	for _, item := range items {
 		h.s = append(h.s, &item)
 	}
@@ -29,7 +25,7 @@ func (h *hub) len() int {
 	return len(h.s)
 }
 
-func (k *hub) remove(key []byte) bool {
+func (k *hub) remove(key string) bool {
 	if k.len() == 0 {
 		return true
 	}
@@ -38,7 +34,7 @@ func (k *hub) remove(key []byte) bool {
 		if val == nil {
 			continue
 		}
-		if bytes.Equal(*val, key) {
+		if *val == key {
 			index = i
 			break
 		}

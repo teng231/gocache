@@ -24,11 +24,9 @@ func TestWorkWithRefresh(t *testing.T) {
 	shard := initShard(nil)
 	go func() {
 		for i := 0; i < 1_000_000; i++ {
-			x := []byte(strconv.Itoa(i))
 			y := []byte(strconv.Itoa(i + 1))
 
 			shard.Upsert(strconv.Itoa(i), &Item{
-				Key:   x,
 				Value: y,
 			}, 100*time.Second)
 		}
@@ -64,9 +62,8 @@ func TestGetPosition2(t *testing.T) {
 func TestAllocShard(t *testing.T) {
 	shard := initShard(nil)
 	n := 1_000_000
-	printAlloc()
+
 	for i := 0; i < n; i++ {
-		x := []byte(strconv.Itoa(i))
 		y := []byte(`{
 			"id": 496,
 			"city": null,
@@ -89,32 +86,26 @@ func TestAllocShard(t *testing.T) {
 			"companySlug": "cmc-tssg"
 		}`)
 		shard.Upsert(strconv.Itoa(i), &Item{
-			Key:   x,
 			Value: y,
 		}, 100*time.Second)
 	}
 	shard.Info()
-	printAlloc()
+
 	for i := 0; i < n; i++ { // Deletes 1 million elements
 		shard.Delete(strconv.Itoa(i))
 	}
 	shard.Info()
 	runtime.GC() // Triggers a manual GC
-	printAlloc()
 
 	for i := 0; i < 6000; i++ {
-		x := []byte(strconv.Itoa(i))
 		y := []byte(strconv.Itoa(i + 1))
 		shard.Upsert(strconv.Itoa(i), &Item{
-			Key:   x,
 			Value: y,
 		}, 100*time.Second)
 	}
 
-	printAlloc()
 	shard.refresh()
 	runtime.GC() // Triggers a manual GC
-	printAlloc()
 
 	runtime.KeepAlive(shard) // Keeps a reference to m so that the map isn’t collected
 }

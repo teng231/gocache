@@ -3,22 +3,21 @@ package gocache
 import (
 	"errors"
 	"log"
-	"runtime"
 	"sync"
 	"time"
 )
 
 type Item struct {
-	Value []byte
-	Key   []byte
+	Value   []byte
+	ttlTime int64
 }
 
 type IEngine interface {
 	Len() int
-	Set(key []byte, value []byte) error
-	Get(key []byte) error
-	// OnRemove(func(i *Item))
-	Delete(key []byte) error
+	Set(key string, value []byte) error
+	Get(key string) ([]byte, error)
+	Pop() ([]byte, error)
+	Delete(key string) error
 	Purge() error
 }
 
@@ -31,20 +30,17 @@ type Engine struct {
 	keyhub      *hub
 }
 
-func printAlloc() {
-	m := &runtime.MemStats{}
-	runtime.ReadMemStats(m)
-	log.Printf("Alloc: %d Mb, Sys: %d, HeapObject: %d HeapRelease: %d, HeapSys: %d", m.Alloc/1024/1024, m.Sys/1024/1024, m.HeapObjects, m.HeapReleased, m.HeapSys)
-	m = nil
-}
-
-func (e *Engine) setRefresh(refreshDuration time.Duration, isGC, verbose bool) {
+func (e *Engine) setRefresh(refreshDuration time.Duration, verbose bool) {
 	tick := time.NewTicker(refreshDuration)
 	go func() {
 		for {
 			<-tick.C
 			e.lock.RLock()
-			e.Refresh(isGC, verbose)
+			// e.Refresh(verbose)
+			for _, shard := range e.shardData {
+				shard.refresh()
+			}
+			e.lock.RUnlock()
 		}
 	}()
 }
@@ -83,24 +79,12 @@ func New(cf *Config) (*Engine, error) {
 		numberShard: cf.Shard,
 		onRemove:    cf.OnRemove,
 		ttl:         cf.TTL,
-		keyhub:      &hub{s: make([]*[]byte, 0)},
+		keyhub:      &hub{s: make([]*string, 0)},
 	}
-	engine.setRefresh(cf.CleanWindow, cf.IsManualGC, cf.Verbose)
+	engine.setRefresh(cf.CleanWindow, cf.Verbose)
 	return engine, nil
 }
-func (e *Engine) Refresh(isGC, verbose bool) {
-	for _, shard := range e.shardData {
-		shard.refresh()
-	}
-	if verbose {
-		printAlloc()
-		defer printAlloc()
-	}
-	if isGC {
-		runtime.GC()
-		log.Print("GC started")
-	}
-}
+
 func (e *Engine) Len() int {
 	count := 0
 	for _, i := range e.shardData {
@@ -109,11 +93,11 @@ func (e *Engine) Len() int {
 	return count
 }
 
-func (e *Engine) set(key []byte, value []byte) error {
-	pos := getPosition(key, e.numberShard)
+func (e *Engine) set(key string, value []byte) error {
+	pos := getPosition([]byte(key), e.numberShard)
 	isInsert := e.shardData[pos].Upsert(string(key), &Item{
 		Value: value,
-		Key:   key,
+		// ttl:   time.Now().Unix() + int64(e.ttl.Seconds()),
 	}, e.ttl)
 	if isInsert {
 		e.keyhub.push(key)
@@ -121,22 +105,22 @@ func (e *Engine) set(key []byte, value []byte) error {
 	return nil
 }
 
-func (e *Engine) Set(key []byte, value []byte) error {
+func (e *Engine) Set(key string, value []byte) error {
 	e.lock.RLock()
 	defer e.lock.RUnlock()
 	return e.set(key, value)
 }
 
-func (e *Engine) get(key []byte) ([]byte, error) {
-	pos := getPosition(key, e.numberShard)
-	data, has := e.shardData[pos].Get(string(key))
+func (e *Engine) get(key string) ([]byte, error) {
+	pos := getPosition([]byte(key), e.numberShard)
+	data, has := e.shardData[pos].Get(key)
 	if !has {
 		return nil, errors.New(E_not_found)
 	}
 	return data.Value, nil
 }
 
-func (e *Engine) Get(key []byte) ([]byte, error) {
+func (e *Engine) Get(key string) ([]byte, error) {
 	e.lock.RLock()
 	defer e.lock.RUnlock()
 	return e.get(key)
@@ -146,27 +130,27 @@ func (e *Engine) Pop() ([]byte, error) {
 	e.lock.Lock()
 	defer e.lock.Unlock()
 	key := e.keyhub.pop()
-	if key == nil {
+	if key == "" {
 		return nil, errors.New(E_queue_is_empty)
 	}
-	pos := getPosition(key, e.numberShard)
-	data, has := e.shardData[pos].Get(string(key))
+	pos := getPosition([]byte(key), e.numberShard)
+	data, has := e.shardData[pos].Get(key)
 	if !has {
 		return nil, errors.New(E_not_found)
 	}
-	e.shardData[pos].Delete(string(key))
+	e.shardData[pos].Delete(key)
 	return data.Value, nil
 }
 
-func (e *Engine) delete(key []byte) error {
-	pos := getPosition(key, e.numberShard)
+func (e *Engine) delete(key string) error {
+	pos := getPosition([]byte(key), e.numberShard)
 	if isDel := e.keyhub.remove(key); isDel {
 		log.Print(isDel)
 	}
-	e.shardData[pos].Delete(string(key))
+	e.shardData[pos].Delete(key)
 	return nil
 }
-func (e *Engine) Delete(key []byte) error {
+func (e *Engine) Delete(key string) error {
 	e.lock.Lock()
 	defer e.lock.Unlock()
 	return e.delete(key)
@@ -178,5 +162,12 @@ func (e *Engine) Purge() error {
 	for _, shard := range e.shardData {
 		shard.Purge()
 	}
+	return nil
+}
+
+func (e *Engine) Info() error {
+	e.lock.Lock()
+	defer e.lock.Unlock()
+	log.Printf("%d %d", e.Len(), e.keyhub.len())
 	return nil
 }

@@ -3,13 +3,19 @@ package gocache
 import (
 	"log"
 	"runtime"
-	"runtime/debug"
 	"strconv"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 )
+
+func printAlloc() {
+	m := &runtime.MemStats{}
+	runtime.ReadMemStats(m)
+	log.Printf("Alloc: %d Mb, Sys: %d, HeapObject: %d HeapRelease: %d, HeapSys: %d", m.Alloc/1024/1024, m.Sys/1024/1024, m.HeapObjects, m.HeapReleased, m.HeapSys)
+	m = nil
+}
 
 func TestExpired(t *testing.T) {
 	engine, err := New(&Config{
@@ -22,9 +28,9 @@ func TestExpired(t *testing.T) {
 		panic(err)
 	}
 	log.Print("okeee")
-	engine.Set([]byte("key"), []byte("halo"))
+	engine.Set("key", []byte("halo"))
 	time.Sleep(3 * time.Second)
-	out, err := engine.Get([]byte("key"))
+	out, err := engine.Get("key")
 	log.Print(string(out), err)
 }
 func TestNormalCase(t *testing.T) {
@@ -38,7 +44,7 @@ func TestNormalCase(t *testing.T) {
 	// }
 	now := time.Now()
 	// log.Print(engine.Len(), " ")
-	buf := make(chan []byte, 40000)
+	buf := make(chan string, 40000)
 
 	wg := &sync.WaitGroup{}
 
@@ -55,8 +61,8 @@ func TestNormalCase(t *testing.T) {
 	}
 	for i := 0; i < 1000000; i++ {
 		wg.Add(1)
-		engine.Set([]byte("key"+strconv.Itoa(i)), []byte("value1"+strconv.Itoa(i)))
-		buf <- []byte("key" + strconv.Itoa(i))
+		engine.Set("key"+strconv.Itoa(i), []byte("value1"+strconv.Itoa(i)))
+		buf <- "key" + strconv.Itoa(i)
 	}
 
 	wg.Wait()
@@ -83,7 +89,6 @@ func TestPopDuplicate(t *testing.T) {
 			for {
 				<-buf
 				data, _ := engine.Pop()
-				// log.Print(i, " ", string(data), err)
 				mt.RLock()
 				_, has := m[string(data)]
 				if has {
@@ -100,144 +105,45 @@ func TestPopDuplicate(t *testing.T) {
 	}
 	for i := 0; i < 1000000; i++ {
 		wg.Add(1)
-		engine.Set([]byte("key"+strconv.Itoa(i)), []byte("value1"+strconv.Itoa(i)))
+		engine.Set("key"+strconv.Itoa(i), []byte("value1"+strconv.Itoa(i)))
 		buf <- []byte("key" + strconv.Itoa(i))
 	}
 
 	wg.Wait()
 	log.Print(time.Since(now), a)
+	log.Print(1111, engine.Info())
 }
 
-func TestPopHybrid(t *testing.T) {
-	engine, err := New(DefaultConfig())
-	if err != nil {
-		panic(err)
-	}
-	log.Print("okeee")
-	now := time.Now()
-	// log.Print(engine.Len(), " ")
-	buf := make(chan []byte, 40000)
-
-	wg := &sync.WaitGroup{}
-	m := map[string]bool{}
-	mt := &sync.RWMutex{}
-	for i := 0; i < 200; i++ {
-		go func(i int) {
-			time.Sleep(time.Second)
-			for {
-				<-buf
-				data, err := engine.Pop()
-				log.Print(i, " ", string(data), err)
-				mt.RLock()
-				_, has := m[string(data)]
-				if has {
-					panic("existed " + string(data))
-				}
-				mt.RUnlock()
-				mt.Lock()
-				m[string(data)] = true
-				mt.Unlock()
-				wg.Done()
-			}
-		}(i)
-	}
-	for i := 0; i < 1000000; i++ {
-		if i > 800000 {
-			time.Sleep(100 * time.Nanosecond)
-		}
-		wg.Add(1)
-		engine.Set([]byte("key"+strconv.Itoa(i)), []byte("value1"+strconv.Itoa(i)))
-		buf <- []byte("key" + strconv.Itoa(i))
-	}
-
-	wg.Wait()
-	log.Print(time.Since(now))
-}
-
-func TestPopHybridWithGC(t *testing.T) {
-	engine, err := New(DefaultConfig())
-	if err != nil {
-		panic(err)
-	}
-	log.Print("okeee")
-	now := time.Now()
-	// log.Print(engine.Len(), " ")
-	buf := make(chan []byte, 40000)
-
-	wg := &sync.WaitGroup{}
-	m := map[string]bool{}
-	mt := &sync.RWMutex{}
-	for i := 0; i < 100; i++ {
-		go func(i int) {
-			time.Sleep(time.Second)
-			for {
-				<-buf
-				data, err := engine.Pop()
-				log.Print(i, " ", string(data), err)
-				mt.RLock()
-				_, has := m[string(data)]
-				if has {
-					panic("existed " + string(data))
-				}
-				mt.RUnlock()
-				mt.Lock()
-				m[string(data)] = true
-				mt.Unlock()
-				wg.Done()
-			}
-		}(i)
-	}
-	for i := 0; i < 5000000; i++ {
-		wg.Add(1)
-		engine.Set([]byte("key"+strconv.Itoa(i)), []byte("value1"+strconv.Itoa(i)))
-		buf <- []byte("key" + strconv.Itoa(i))
-	}
-
-	wg.Wait()
-	log.Print(time.Since(now))
-	log.Print("run gc")
-	for i := 0; i < 3; i++ {
-		runtime.GC()
-		debug.FreeOSMemory()
-		time.Sleep(2 * time.Second)
-	}
-	log.Print("done gc")
-	time.Sleep(10 * time.Second)
-}
 func TestAlloc(t *testing.T) {
 	n := 1_000_00
 	m := make(map[int]*[128]byte)
-	printAlloc()
 
 	for i := 0; i < n; i++ { // Adds 1 million elements
 		x := [128]byte{}
 		m[i] = &x
 	}
-	printAlloc()
 
 	for i := 0; i < n; i++ { // Deletes 1 million elements
 		delete(m, i)
 	}
 
 	runtime.GC() // Triggers a manual GC
-	printAlloc()
+
 	runtime.KeepAlive(m) // Keeps a reference to m so that the map isn’t collected
 
 }
 
 func TestAllocCache(t *testing.T) {
 	engine, _ := New(&Config{
-		Shard:        256,
-		OnRemove:     nil,
-		CleanWindow:  5 * time.Minute,
-		TTL:          12 * time.Hour,
-		RefreshShard: 12*time.Hour + time.Minute,
-		IsManualGC:   false,
+		Shard:       64,
+		OnRemove:    nil,
+		CleanWindow: time.Minute,
+		TTL:         12 * time.Hour,
 	})
 	n := 1_000_000
-	printAlloc()
+
 	for i := 0; i < n; i++ {
-		engine.Set([]byte(strconv.Itoa(i)), []byte(`{
+		engine.Set(strconv.Itoa(i), []byte(`{
 			"id": 496,
 			"city": null,
 			"jobTitle": "network engineer",
@@ -259,11 +165,10 @@ func TestAllocCache(t *testing.T) {
 			"companySlug": "cmc-tssg"
 		}`))
 	}
-	printAlloc()
 
-	log.Print(engine.keyhub.len())
-	log.Print(engine.Len())
-	time.Sleep(time.Second)
+	// log.Print(engine.keyhub.len())
+	// log.Print(engine.Len())
+	// time.Sleep(time.Second)
 	now := time.Now()
 	wg := &sync.WaitGroup{}
 	wg.Add(100)
@@ -285,8 +190,5 @@ func TestAllocCache(t *testing.T) {
 	wg.Wait()
 	log.Print("--- ", time.Since(now))
 	printAlloc()
-	// engine.re
-	// printAlloc()
-
 	runtime.KeepAlive(engine) // Keeps a reference to m so that the map isn’t collected
 }

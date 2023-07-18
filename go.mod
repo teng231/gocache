@@ -1,3 +1,3 @@
 module github.com/teng231/gocache
 
-go 1.19
+go 1.18

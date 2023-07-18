@@ -1,7 +1,6 @@
 package gocache
 
 import (
-	"bytes"
 	"runtime"
 	"strconv"
 	"testing"
@@ -11,19 +10,19 @@ func TestHub(t *testing.T) {
 	h := &hub{}
 
 	// Test empty pop
-	if h.pop() != nil {
+	if h.pop() != "" {
 		t.Errorf("pop() on empty hub should return nil")
 	}
 
 	// Test push and pop
-	h.push([]byte("foo"), []byte("foo3s"), []byte("bar"), []byte("baz"))
+	h.push("foo", "foo3s", "bar", "baz")
 	if len(h.s) != 4 {
 		t.Errorf("hub length should be 3 after push, got %d", len(h.s))
 	}
-	if !bytes.Equal(h.pop(), []byte("foo")) {
+	if h.pop() == "foo" {
 		t.Errorf("pop() should return 'foo'")
 	}
-	if !bytes.Equal(h.pop(), []byte("foo3s")) {
+	if h.pop() == "foo3s" {
 		t.Errorf("pop() should return 'foo3s'")
 	}
 	if len(h.s) != 2 {
@@ -31,24 +30,24 @@ func TestHub(t *testing.T) {
 	}
 
 	// Test remove
-	h.remove([]byte("bar"))
+	h.remove("bar")
 	if len(h.s) != 1 {
 		t.Errorf("hub length should be 1 after remove, got %d", len(h.s))
 	}
-	if !bytes.Equal(*(h.s[0]), []byte("baz")) {
+	if *(h.s[0]) != "baz" {
 		t.Errorf("remaining element should be 'baz'")
 	}
 }
 
 func TestAllocKeyhub(t *testing.T) {
-	h := &hub{s: make([]*[]byte, 0)}
+	h := &hub{s: make([]*string, 0)}
 	n := 100_0000
-	printAlloc()
+
 	for i := 0; i < n; i++ {
-		x := []byte(strconv.Itoa(i) + "data")
+		x := strconv.Itoa(i) + "data"
 		h.push(x)
 	}
-	printAlloc()
+
 	// log.Print(h.len())
 	// wg := &sync.WaitGroup{}
 	// wg.Add(10)
@@ -71,13 +70,11 @@ func TestAllocKeyhub(t *testing.T) {
 		// out := h.pop()
 		// log.Print(string(out))
 
-		// x := []byte(strconv.Itoa(i) + "cau chuyen tinh yeu, 10000000")
+		// x := strconv.Itoa(i) + "cau chuyen tinh yeu, 10000000")
 		// h.remove(x)
 	}
-	printAlloc()
 
 	runtime.GC() // Triggers a manual GC
-	printAlloc()
 
 	runtime.KeepAlive(h) // Keeps a reference to m so that the map isn’t collected
 }
