@@ -7,11 +7,18 @@ type hub struct {
 	lock *sync.RWMutex
 }
 
+func (h *hub) getS() []*string {
+	h.lock.Lock()
+	defer h.lock.Unlock()
+	return h.s
+}
+
 func (h *hub) pop() string {
 	if h.len() == 0 {
 		return ""
 	}
-	// log.Print(h.s)
+	h.lock.Lock()
+	defer h.lock.Unlock()
 	out := h.s[0]
 	h.s[0] = nil
 	h.s = h.s[1:]
