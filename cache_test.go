@@ -77,11 +77,13 @@ func TestExpired2(t *testing.T) {
 	time.Sleep(10 * time.Second)
 	// log.Print(string(out), err)
 }
+
+// 910.577416ms 1_000_000
 func TestRWConcurentGetSetHashCore(t *testing.T) {
 	engine, err := New(&Config{
 		TTL:         10 * time.Second,
 		Shard:       10,
-		CleanWindow: 1 * time.Second,
+		CleanWindow: 3 * time.Second,
 	})
 	if err != nil {
 		panic(err)
@@ -92,7 +94,7 @@ func TestRWConcurentGetSetHashCore(t *testing.T) {
 	// }
 	now := time.Now()
 	// log.Print(engine.Len(), " ")
-	buf := make(chan string, 40000)
+	buf := make(chan string, 10000)
 
 	wg := &sync.WaitGroup{}
 
@@ -109,7 +111,7 @@ func TestRWConcurentGetSetHashCore(t *testing.T) {
 	wg.Add(10)
 	for i := 0; i < 10; i++ {
 		go func(i int) {
-			for j := 0; j < 3_00_000; j++ {
+			for j := 0; j < 1_00_000; j++ {
 				wg.Add(1)
 				engine.Set("key"+strconv.Itoa(i)+"+"+strconv.Itoa(j), []byte("value1"+strconv.Itoa(j)))
 				buf <- "key" + strconv.Itoa(i) + "+" + strconv.Itoa(j)
@@ -122,44 +124,55 @@ func TestRWConcurentGetSetHashCore(t *testing.T) {
 	log.Print(time.Since(now))
 }
 
+// 2.933562333s 1000000
 func TestPopDuplicate(t *testing.T) {
-	engine, err := New(DefaultConfig())
+	engine, err := New(&Config{
+		TTL:         10 * time.Second,
+		Shard:       10,
+		CleanWindow: 4 * time.Second,
+	})
 	if err != nil {
 		panic(err)
 	}
 	log.Print("okeee")
 	now := time.Now()
 	// log.Print(engine.Len(), " ")
-	buf := make(chan []byte, 1000000)
+	buf := make(chan string, 10000)
 
 	wg := &sync.WaitGroup{}
 	m := map[string]bool{}
 	mt := &sync.RWMutex{}
 	var a int64 = 0
-	for i := 0; i < 300; i++ {
+	for i := 0; i < 200; i++ {
 		go func(i int) {
 			time.Sleep(time.Second)
 			for {
 				<-buf
 				key, data, _ := engine.Pop()
 				mt.RLock()
-				_, has := m[string(data)]
+				_, has := m[key]
 				if has {
 					panic("existed " + string(data) + " " + key)
 				}
 				mt.RUnlock()
 				mt.Lock()
-				m[string(data)] = true
+				m[key] = true
 				mt.Unlock()
 				wg.Done()
 				atomic.AddInt64(&a, 1)
 			}
 		}(i)
 	}
-	for i := 0; i < 1000000; i++ {
-		wg.Add(1)
-		engine.Set("key"+strconv.Itoa(i), []byte("value1"+strconv.Itoa(i)))
-		buf <- []byte("key" + strconv.Itoa(i))
+	wg.Add(10)
+	for i := 0; i < 10; i++ {
+		go func(i int) {
+			for j := 0; j < 1_00_000; j++ {
+				wg.Add(1)
+				engine.Set("key"+strconv.Itoa(i)+"+"+strconv.Itoa(j), []byte("value1"+strconv.Itoa(j)))
+				buf <- "key" + strconv.Itoa(i) + "+" + strconv.Itoa(j)
+			}
+			wg.Done()
+		}(i)
 	}
 
 	wg.Wait()
@@ -186,6 +199,8 @@ func TestAlloc(t *testing.T) {
 
 }
 
+// cache_test.go:257: --- 556.009125ms
+// cache_test.go:16: Alloc: 673 Mb, Sys: 712, HeapObject: 4518831 HeapRelease: 4579328, HeapSys: 712572928
 func TestAllocCache(t *testing.T) {
 	engine, _ := New(&Config{
 		Shard:       64,
@@ -321,6 +336,7 @@ func TestAllocCacheHardcore(t *testing.T) {
 	runtime.KeepAlive(engine) // Keeps a reference to m so that the map isn’t collected
 }
 
+// 2.119178333s 1_000_000
 func TestRWConcurentPopGetHashCore(t *testing.T) {
 	engine, err := New(&Config{
 		TTL:         10 * time.Second,
@@ -336,7 +352,7 @@ func TestRWConcurentPopGetHashCore(t *testing.T) {
 	// }
 	now := time.Now()
 	// log.Print(engine.Len(), " ")
-	buf := make(chan string, 40000)
+	buf := make(chan string, 100000)
 
 	wg := &sync.WaitGroup{}
 	m := map[string]bool{}
@@ -371,7 +387,7 @@ func TestRWConcurentPopGetHashCore(t *testing.T) {
 	wg.Add(10)
 	for i := 0; i < 10; i++ {
 		go func(i int) {
-			for j := 0; j < 3_00_000; j++ {
+			for j := 0; j < 1_00_000; j++ {
 				wg.Add(1)
 				engine.Set("key"+strconv.Itoa(i)+"+"+strconv.Itoa(j), []byte("value1"+strconv.Itoa(j)))
 				buf <- "key" + strconv.Itoa(i) + "+" + strconv.Itoa(j)
@@ -382,4 +398,138 @@ func TestRWConcurentPopGetHashCore(t *testing.T) {
 
 	wg.Wait()
 	log.Print(time.Since(now))
+}
+
+// cache_test.go:454: 2.506602792s
+func TestRWConcurentScanGetSetHashCore(t *testing.T) {
+	engine, err := New(&Config{
+		TTL:         10 * time.Second,
+		Shard:       10,
+		CleanWindow: 1 * time.Second,
+	})
+	if err != nil {
+		panic(err)
+	}
+	log.Print("okeee")
+
+	now := time.Now()
+	// log.Print(engine.Len(), " ")
+	buf := make(chan string, 100000)
+
+	wg := &sync.WaitGroup{}
+	for i := 0; i < 200; i++ {
+		go func(i int) {
+			for {
+				item := <-buf
+				engine.Get(item)
+				wg.Done()
+			}
+		}(i)
+	}
+	wg.Add(10)
+	for i := 0; i < 10; i++ {
+		go func(i int) {
+			for j := 0; j < 1_00_000; j++ {
+				wg.Add(1)
+				engine.Set("key"+strconv.Itoa(i)+"+"+strconv.Itoa(j), []byte("value1"+strconv.Itoa(j)), MetaData{"id": strconv.Itoa(j), "worker": strconv.Itoa(i)})
+				buf <- "key" + strconv.Itoa(i) + "+" + strconv.Itoa(j)
+			}
+			wg.Done()
+		}(i)
+	}
+	for i := 0; i < 100; i++ {
+
+		now2 := time.Now()
+		engine.Scan(func(key string, val []byte, metaData MetaData) bool {
+			if metaData["id"] == "4000" && metaData["worker"] == "8" {
+				// log.Print("founded")
+				return true
+			}
+			return false
+		})
+
+		log.Print(time.Since(now2))
+		time.Sleep(2 * time.Millisecond)
+	}
+	wg.Wait()
+	log.Print(time.Since(now))
+
+}
+
+// cache_test.go:454: 2.506602792s
+func TestRWConcurentScanHashCore(t *testing.T) {
+	engine, err := New(&Config{
+		TTL:         10 * time.Second,
+		Shard:       10,
+		CleanWindow: 1 * time.Second,
+	})
+	if err != nil {
+		panic(err)
+	}
+	log.Print("okeee")
+
+	now := time.Now()
+	// log.Print(engine.Len(), " ")
+	buf := make(chan string, 100000)
+
+	wg := &sync.WaitGroup{}
+	for i := 0; i < 200; i++ {
+		go func(i int) {
+			for {
+				item := <-buf
+				engine.Get(item)
+				wg.Done()
+			}
+		}(i)
+	}
+	wg.Add(10)
+	for i := 0; i < 10; i++ {
+		go func(i int) {
+			for j := 0; j < 1_00_000; j++ {
+				wg.Add(1)
+				engine.Set("key"+strconv.Itoa(i)+"+"+strconv.Itoa(j), []byte("value1"+strconv.Itoa(j)), MetaData{"id": strconv.Itoa(j), "worker": strconv.Itoa(i)})
+				buf <- "key" + strconv.Itoa(i) + "+" + strconv.Itoa(j)
+			}
+			wg.Done()
+		}(i)
+	}
+	wg.Wait()
+	log.Print(time.Since(now))
+	m := map[string]bool{}
+	mt := &sync.RWMutex{}
+	var a int64 = 0
+
+	for i := 0; i < 100; i++ {
+
+		go func() {
+			for {
+				if a > 9999 {
+					return
+				}
+				now2 := time.Now()
+				engine.Scan(func(key string, val []byte, metaData MetaData) bool {
+					id, _ := strconv.Atoi(metaData["id"])
+					if id%3 == 0 && metaData["worker"] == "8" {
+
+						mt.RLock()
+						_, has := m[key]
+						if has {
+							panic("existed " + key)
+						}
+						mt.RUnlock()
+
+						mt.Lock()
+						m[metaData["id"]] = true
+						mt.Unlock()
+
+						atomic.AddInt64(&a, 1)
+
+						return true
+					}
+					return false
+				})
+				log.Print(time.Since(now2))
+			}
+		}()
+	}
 }

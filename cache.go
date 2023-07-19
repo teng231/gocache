@@ -7,14 +7,17 @@ import (
 	"time"
 )
 
+type MetaData map[string]string
 type Item struct {
-	Value   []byte
-	ttlTime int64
+	Value    []byte
+	MetaData *MetaData
+	ttlTime  int64
 }
 
 type IEngine interface {
 	Len() int
 	Set(key string, value []byte) error
+	Keys() []string
 	Get(key string) ([]byte, error)
 	Pop() (string, []byte, error)
 	Delete(key string) error
@@ -80,37 +83,43 @@ func (e *Engine) Len() int {
 	return count
 }
 
-func (e *Engine) set(key string, value []byte) error {
+func (e *Engine) Set(key string, value []byte, metaData ...MetaData) error {
 	pos := getPosition([]byte(key), e.numberShard)
-	isInsert := e.shardData[pos].Upsert(string(key), &Item{
+	item := &Item{
 		Value: value,
-		// ttl:   time.Now().Unix() + int64(e.ttl.Seconds()),
-	}, e.ttl)
+	}
+	if len(metaData) > 0 {
+		item.MetaData = &metaData[0]
+	}
+	e.lock.RLock()
+	isInsert := e.shardData[pos].Upsert(string(key), item, e.ttl)
+	e.lock.RUnlock()
 	if isInsert {
 		e.keyhub.push(key)
 	}
 	return nil
 }
 
-func (e *Engine) Set(key string, value []byte) error {
+func (e *Engine) getWithMetaData(key string) (MetaData, []byte, error) {
+	pos := getPosition([]byte(key), e.numberShard)
 	e.lock.RLock()
-	defer e.lock.RUnlock()
-	return e.set(key, value)
+	data, has := e.shardData[pos].Get(key)
+	e.lock.RUnlock()
+	if !has {
+		return nil, nil, errors.New(E_not_found)
+	}
+	return *data.MetaData, data.Value, nil
 }
 
-func (e *Engine) get(key string) ([]byte, error) {
+func (e *Engine) Get(key string) ([]byte, error) {
 	pos := getPosition([]byte(key), e.numberShard)
+	e.lock.RLock()
 	data, has := e.shardData[pos].Get(key)
+	e.lock.RUnlock()
 	if !has {
 		return nil, errors.New(E_not_found)
 	}
 	return data.Value, nil
-}
-
-func (e *Engine) Get(key string) ([]byte, error) {
-	e.lock.RLock()
-	defer e.lock.RUnlock()
-	return e.get(key)
 }
 
 func (e *Engine) Pop() (string, []byte, error) {
@@ -129,18 +138,13 @@ func (e *Engine) Pop() (string, []byte, error) {
 	return key, data.Value, nil
 }
 
-func (e *Engine) delete(key string) error {
-	pos := getPosition([]byte(key), e.numberShard)
-	if isDel := e.keyhub.remove(key); isDel {
-		log.Print(isDel)
-	}
-	e.shardData[pos].Delete(key)
-	return nil
-}
 func (e *Engine) Delete(key string) error {
+	pos := getPosition([]byte(key), e.numberShard)
+	e.keyhub.remove(key)
 	e.lock.Lock()
-	defer e.lock.Unlock()
-	return e.delete(key)
+	e.shardData[pos].Delete(key)
+	e.lock.Unlock()
+	return nil
 }
 
 func (e *Engine) Purge() error {
@@ -157,4 +161,18 @@ func (e *Engine) Info() error {
 	defer e.lock.Unlock()
 	log.Printf("%d %d", e.Len(), e.keyhub.len())
 	return nil
+}
+
+func (e *Engine) Scan(handler func(key string, val []byte, metaData MetaData) bool) {
+	sPtrs := e.keyhub.getS()
+	for _, sPtr := range sPtrs {
+		metaData, val, err := e.getWithMetaData(*sPtr)
+		if err != nil {
+			continue
+		}
+		isBreak := handler(*sPtr, val, metaData)
+		if isBreak {
+			break
+		}
+	}
 }
