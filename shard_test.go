@@ -31,8 +31,6 @@ func TestWorkWithRefresh(t *testing.T) {
 			}, 100*time.Second)
 		}
 	}()
-	time.Sleep(20 * time.Millisecond)
-	shard.refresh()
 	time.Sleep(3 * time.Second)
 	shard.Info()
 }
@@ -104,7 +102,6 @@ func TestAllocShard(t *testing.T) {
 		}, 100*time.Second)
 	}
 
-	shard.refresh()
 	runtime.GC() // Triggers a manual GC
 
 	runtime.KeepAlive(shard) // Keeps a reference to m so that the map isn’t collected

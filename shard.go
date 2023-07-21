@@ -27,25 +27,11 @@ func initShard(onRemove func(key []byte, i *Item)) *Shard {
 	}
 }
 
-func (s *Shard) refresh() {
-	newData := make(map[string]*Item)
-	s.lock.Lock()
-	for k, v := range s.data {
-		newData[k] = v
-	}
-	s.data = newData
-	s.lock.Unlock()
-}
-
 func (s *Shard) Count() int {
 	return int(s.count)
 }
 
 func (s *Shard) Purge() {
-	s.lock.Lock()
-	defer func() {
-		s.lock.Unlock()
-	}()
 	for key := range s.data {
 		delete(s.data, key)
 	}
@@ -99,12 +85,31 @@ func (s *Shard) Get(key string) (*Item, bool) {
 	return item, has
 }
 
-func (s *Shard) iteratorExpire() {
+func (s *Shard) GetThenDelete(key string) (*Item, bool) {
+	s.lock.RLock()
+	item, has := s.data[key]
+	s.lock.RUnlock()
+	if !has {
+		log.Print("not found key: ", key)
+		return nil, false
+	}
+	if isExpired(item.ttlTime) {
+		s.Delete(key)
+		return nil, false
+	}
+	s.Delete(key)
+	return item, has
+}
+
+func (s *Shard) iteratorExpire() []string {
+	keysDeleted := make([]string, 0)
 	for key, dataItem := range s.data {
 		if isExpired(dataItem.ttlTime) {
 			s.Delete(key)
+			keysDeleted = append(keysDeleted, key)
 		}
 	}
+	return keysDeleted
 }
 
 func (s *Shard) Info() {

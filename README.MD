@@ -30,11 +30,11 @@ if err!=nil{
 
 log.Print("OUT:", string(out))
 
-out, err = engine.Pop()
+key, out, err = engine.Pop()
 
 log.Print("OUT:", string(out))
 ```
 
-## Refer
+## References
 - [https://teivah.medium.com/maps-and-memory-leaks-in-go-a85ebe6e7e69](https://teivah.medium.com/maps-and-memory-leaks-in-go-a85ebe6e7e69)
 - [https://github.com/golang/go/issues/35890](https://github.com/golang/go/issues/35890)
