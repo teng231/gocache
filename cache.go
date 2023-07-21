@@ -15,15 +15,15 @@ type Item struct {
 	ttlTime  int64
 }
 
-type IEngine interface {
-	Len() int
-	Set(key string, value []byte) error
-	Keys() []string
-	Get(key string) ([]byte, error)
-	Pop() (string, []byte, error)
-	Delete(key string) error
-	Purge() error
-}
+// type IEngine interface {
+// 	Len() int
+// 	Set(key string, value []byte) error
+// 	Keys() []string
+// 	Get(key string) ([]byte, error)
+// 	Pop() (string, []byte, error)
+// 	Delete(key string) error
+// 	Purge() error
+// }
 
 type Engine struct {
 	shardData   []*Shard
