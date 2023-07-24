@@ -10,8 +10,7 @@ func init() {
 }
 
 type Config struct {
-	Shard       int
-	OnRemove    func([]byte, *Item)
+	OnRemove    func(string, *Item)
 	TTL         time.Duration
 	CleanWindow time.Duration
 	Verbose     bool
@@ -19,7 +18,6 @@ type Config struct {
 
 func DefaultConfig() *Config {
 	return &Config{
-		Shard:       256,
 		OnRemove:    nil,
 		CleanWindow: 5 * time.Minute,
 		TTL:         12 * time.Hour,

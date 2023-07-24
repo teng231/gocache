@@ -17,34 +17,45 @@ func printAlloc() {
 	m = nil
 }
 
+// 998.085208ms 1000_000
+// 868.76675ms
+func TestConcurrentSet(t *testing.T) {
+	engine, err := New(&Config{
+		TTL:         20 * time.Second,
+		CleanWindow: 20 * time.Second,
+	})
+
+	if err != nil {
+		panic(err)
+	}
+	wg := &sync.WaitGroup{}
+	noww := time.Now()
+	wg.Add(10)
+	for i := 0; i < 10; i++ {
+		go func(i int) {
+			for j := 0; j < 1_00_000; j++ {
+				engine.Set("key"+strconv.Itoa(i)+"+"+strconv.Itoa(j), []byte("value1"+strconv.Itoa(j)))
+				// log.Print(strconv.Itoa(i) + "+" + strconv.Itoa(j))
+			}
+			wg.Done()
+		}(i)
+	}
+
+	wg.Wait()
+	log.Print(time.Since(noww))
+	engine.Info()
+}
+
 func TestExpired(t *testing.T) {
 	engine, err := New(&Config{
 		TTL:         2 * time.Second,
-		Shard:       10,
 		CleanWindow: 1 * time.Second,
 	})
 
 	if err != nil {
 		panic(err)
 	}
-	log.Print("okeee")
-	engine.Set("key", []byte("halo"))
-	time.Sleep(3 * time.Second)
-	out, err := engine.Get("key")
-	log.Print(string(out), err)
-}
-
-func TestExpired2(t *testing.T) {
-	engine, err := New(&Config{
-		TTL:         2 * time.Second,
-		Shard:       10,
-		CleanWindow: 1 * time.Second,
-	})
-
-	if err != nil {
-		panic(err)
-	}
-	n := 1_000_000
+	n := 1_000_00
 
 	for i := 0; i < n; i++ {
 		engine.Set(strconv.Itoa(i), []byte(`{
@@ -71,19 +82,16 @@ func TestExpired2(t *testing.T) {
 		// log.Print("done")
 	}
 	engine.Info()
-	time.Sleep(2 * time.Second)
+	time.Sleep(3 * time.Second)
 	engine.Info()
-	// log.Print(string(out), err)
-	time.Sleep(10 * time.Second)
-	// log.Print(string(out), err)
 }
 
 // 1.970634083s 1_000_000
+// 1.5082555s
 func TestRWConcurentGetSetHashCore(t *testing.T) {
 	engine, err := New(&Config{
-		TTL:         5 * time.Second,
-		Shard:       10,
-		CleanWindow: 1 * time.Second,
+		TTL:         20 * time.Second,
+		CleanWindow: 100 * time.Second,
 	})
 	if err != nil {
 		panic(err)
@@ -125,11 +133,12 @@ func TestRWConcurentGetSetHashCore(t *testing.T) {
 }
 
 // 11.292343625s 1000000
+//
+//	601.912042ms 1000000
 func TestPopDuplicate(t *testing.T) {
 	engine, err := New(&Config{
 		TTL:         100 * time.Second,
-		Shard:       64,
-		CleanWindow: 4 * time.Second,
+		CleanWindow: 100 * time.Second,
 	})
 	if err != nil {
 		panic(err)
@@ -160,7 +169,7 @@ func TestPopDuplicate(t *testing.T) {
 	engine.Info()
 	// time.Sleep(2 * time.Second)
 	now = time.Now()
-
+	wg = &sync.WaitGroup{}
 	wg.Add(1_000_000)
 	for i := 0; i < 200; i++ {
 		go func(i int) {
@@ -168,10 +177,11 @@ func TestPopDuplicate(t *testing.T) {
 				// <-buf
 				key, data, err := engine.Pop()
 				if err != nil {
+					log.Print("NILLL", err)
 					if a > 0 {
 						break
 					}
-					continue
+					// continue
 				}
 				mt.RLock()
 				_, has := m[key]
@@ -181,12 +191,13 @@ func TestPopDuplicate(t *testing.T) {
 				mt.RUnlock()
 				mt.Lock()
 				m[key] = true
+				// log.Print(key, " ", len(m))
 				mt.Unlock()
-				// log.Print(keyl, " ", a)
-				engine.Info()
-				wg.Done()
 				atomic.AddInt64(&a, 1)
-				time.Sleep(time.Millisecond)
+
+				// engine.Info()
+				wg.Done()
+
 			}
 		}(i)
 	}
@@ -200,9 +211,11 @@ func TestPopDuplicate(t *testing.T) {
 
 // cache_test.go:257: --- 556.009125ms
 // cache_test.go:16: Alloc: 673 Mb, Sys: 712, HeapObject: 4518831 HeapRelease: 4579328, HeapSys: 712572928
+
+// cache_test.go:270: --- 402.224792ms
+// cache_test.go:16: Alloc: 651 Mb, Sys: 688, HeapObject: 3502564 HeapRelease: 2744320, HeapSys: 687374336
 func TestAllocCache(t *testing.T) {
 	engine, _ := New(&Config{
-		Shard:       64,
 		OnRemove:    nil,
 		CleanWindow: time.Minute,
 		TTL:         12 * time.Hour,
@@ -232,7 +245,7 @@ func TestAllocCache(t *testing.T) {
 			"companySlug": "cmc-tssg"
 		}`))
 	}
-
+	engine.Info()
 	// log.Print(engine.keyhub.len())
 	// log.Print(engine.Len())
 	// time.Sleep(time.Second)
@@ -264,9 +277,19 @@ func TestAllocCache(t *testing.T) {
 // cache_test.go:314: --- 475.555625ms
 // cache.go:177: 196657 0
 // cache_test.go:16: Alloc: 735 Mb, Sys: 893, HeapObject: 4316154 HeapRelease: 2539520, HeapSys: 896204800
+
+// cache_test.go:325: --- 649.720083ms
+// cache_test.go:349: --- 270.669583ms
+// cache.go:145: data count: 0 listkeys count: 0
+// cache_test.go:16: Alloc: 720 Mb, Sys: 766, HeapObject: 3981982 HeapRelease: 1310720, HeapSys: 766902272
+
+// cache_test.go:328: 1000000
+// cache_test.go:329: --- 921.853709ms
+// cache_test.go:353: --- 594.750458ms
+// cache.go:171: data count: 0 listkeys count: 0
+// cache_test.go:16: Alloc: 720 Mb, Sys: 770, HeapObject: 3981337 HeapRelease: 5070848, HeapSys: 771227648
 func TestAllocCacheHardcore(t *testing.T) {
 	engine, _ := New(&Config{
-		Shard:       64,
 		OnRemove:    nil,
 		CleanWindow: time.Second,
 		TTL:         12 * time.Hour,
@@ -339,10 +362,15 @@ func TestAllocCacheHardcore(t *testing.T) {
 }
 
 // 1.769056708s 1_000_000
+//
+//	960.171084ms 1000000 - 1.030435584s 1000000
+//
+// 1.477163834s 1000000
+
+// 1.442357375s 1000000
 func TestRWConcurentPopGetHashCore(t *testing.T) {
 	engine, err := New(&Config{
-		TTL:         10 * time.Second,
-		Shard:       10,
+		TTL:         15 * time.Second,
 		CleanWindow: 1 * time.Second,
 	})
 	if err != nil {
@@ -391,10 +419,10 @@ func TestRWConcurentPopGetHashCore(t *testing.T) {
 			}
 		}(i)
 	}
-	wg.Add(10)
-	for i := 0; i < 10; i++ {
+	wg.Add(20)
+	for i := 0; i < 20; i++ {
 		go func(i int) {
-			for j := 0; j < 1_00_000; j++ {
+			for j := 0; j < 50_000; j++ {
 				wg.Add(1)
 				engine.Set("key"+strconv.Itoa(i)+"+"+strconv.Itoa(j), []byte("value1"+strconv.Itoa(j)))
 				// buf <- "key" + strconv.Itoa(i) + "+" + strconv.Itoa(j)
@@ -407,68 +435,18 @@ func TestRWConcurentPopGetHashCore(t *testing.T) {
 	log.Print(time.Since(now), " ", a)
 }
 
-// cache_test.go:454: 2.506602792s
-// func TestRWConcurentScanGetSetHashCore(t *testing.T) {
-// 	engine, err := New(&Config{
-// 		TTL:         10 * time.Second,
-// 		Shard:       10,
-// 		CleanWindow: 1 * time.Second,
-// 	})
-// 	if err != nil {
-// 		panic(err)
-// 	}
-// 	log.Print("okeee")
+// 747.7435ms - w 200 p 200 t 92 ~ 4ms/req
+// 439.345333ms- w 100 p200 t 92 ~ 2ms/req
+// 439.345333ms- w 100 p200 t 92 ~ 2ms/req
+// 5.037216333s - w 120 p 1000 t 92 ~ 5.037000 ms/req
+// 3.435857s - w 120 p 500 t 92 ~ 6.870000 ms/req
+// 152.986875ms - w 120 p 100 t 92 ~ 1.520000 ms/req
 
-// 	now := time.Now()
-// 	// log.Print(engine.Len(), " ")
-// 	buf := make(chan string, 100000)
-
-// 	wg := &sync.WaitGroup{}
-// 	for i := 0; i < 200; i++ {
-// 		go func(i int) {
-// 			for {
-// 				item := <-buf
-// 				engine.Get(item)
-// 				wg.Done()
-// 			}
-// 		}(i)
-// 	}
-// 	wg.Add(10)
-// 	for i := 0; i < 10; i++ {
-// 		go func(i int) {
-// 			for j := 0; j < 1_00_000; j++ {
-// 				wg.Add(1)
-// 				engine.Set("key"+strconv.Itoa(i)+"+"+strconv.Itoa(j), []byte("value1"+strconv.Itoa(j)), MetaData{"id": strconv.Itoa(j), "worker": strconv.Itoa(i)})
-// 				buf <- "key" + strconv.Itoa(i) + "+" + strconv.Itoa(j)
-// 			}
-// 			wg.Done()
-// 		}(i)
-// 	}
-// 	for i := 0; i < 100; i++ {
-
-// 		now2 := time.Now()
-// 		// engine.Scan(func(key string, val []byte, metaData MetaData) bool {
-// 		// 	if metaData["id"] == "4000" && metaData["worker"] == "8" {
-// 		// 		// log.Print("founded")
-// 		// 		return true
-// 		// 	}
-// 		// 	return false
-// 		// })
-
-// 		log.Print(time.Since(now2))
-// 		time.Sleep(2 * time.Millisecond)
-// 	}
-// 	wg.Wait()
-// 	log.Print(time.Since(now))
-
-// }
-
-// cache_test.go:454: 2.506602792s
-func TestRWConcurentScanHashCore(t *testing.T) {
+// 141.794791ms - w 120 p 100 t 40 ~ 1.410000 ms/req
+func TestRWConcurentScanGetSetHashCore(t *testing.T) {
 	engine, err := New(&Config{
 		TTL:         100 * time.Second,
-		Shard:       64,
-		CleanWindow: 3 * time.Second,
+		CleanWindow: 1 * time.Second,
 	})
 	if err != nil {
 		panic(err)
@@ -476,17 +454,35 @@ func TestRWConcurentScanHashCore(t *testing.T) {
 	log.Print("okeee")
 
 	now := time.Now()
-	// total := 0
-	m := map[string]bool{}
-	mt := &sync.RWMutex{}
-	var a int64 = 0
+	// log.Print(engine.Len(), " ")
 	wg := &sync.WaitGroup{}
-	// wg = &sync.WaitGroup{}
+	w := 120
+	p := 100
+	t1 := 40
+	wg.Add(w)
+	for i := 0; i < w; i++ {
+		go func(i int) {
+			for j := 0; j < p; j++ {
+				engine.Set("key"+strconv.Itoa(i)+"+"+strconv.Itoa(j), []byte("value1"+strconv.Itoa(j)), MetaData{"worker": strconv.Itoa(i)})
+			}
+			wg.Done()
+		}(i)
+	}
+	wg.Wait()
+	engine.Info()
+	log.Print(time.Since(now))
 	now = time.Now()
+
+	mt := &sync.RWMutex{}
+	m := map[string]bool{}
+	wg.Add(p)
+	t2 := strconv.Itoa(t1)
 	for i := 0; i < 20; i++ {
 		go func() {
 			for {
-				key, _, err := engine.PopWithMetadata("worker", "3")
+				key, _, err := engine.PopWithMetadata(func(metadata MetaData) bool {
+					return metadata["worker"] == t2
+				})
 				// log.Print(key)
 				if err != nil && err.Error() == E_not_found {
 					continue
@@ -502,26 +498,78 @@ func TestRWConcurentScanHashCore(t *testing.T) {
 					panic("existed " + key)
 				}
 				m[key] = true
+				log.Print(len(m))
 				mt.Unlock()
-				atomic.AddInt64(&a, 1)
 			}
 		}()
 	}
-	wg.Add(20)
-	for i := 0; i < 20; i++ {
+	wg.Wait()
+	log.Printf("%s - w %d p %d t %d ~ %f ms/req", time.Since(now).String(), w, p, t1, float32(time.Since(now).Milliseconds())/float32(p))
+
+}
+
+// 7.831917ms - w 120 p 100 t 92 ~ 0.070000 ms/req
+// 5.887451166s - w 1200 p 1000 t 400 ~ 5.887000 ms/req
+// 10.526208ms - w 120 p 100 t 40 ~ 0.100000 ms/req
+func TestRWConcurentPopV2GetSetHashCore(t *testing.T) {
+	engine, err := New(&Config{
+		TTL:         100 * time.Second,
+		CleanWindow: 100 * time.Second,
+	})
+	if err != nil {
+		panic(err)
+	}
+	log.Print("okeee")
+
+	now := time.Now()
+	// log.Print(engine.Len(), " ")
+	wg := &sync.WaitGroup{}
+	w := 120
+	p := 100
+	t1 := 40
+	wg.Add(w)
+	for i := 0; i < w; i++ {
 		go func(i int) {
-			for j := 0; j < 2_000; j++ {
-				if i == 3 {
-					wg.Add(1)
-				}
-				engine.Set("key"+strconv.Itoa(i)+"+"+strconv.Itoa(j), []byte("value1"+strconv.Itoa(j)),
-					MetaData{"worker": strconv.Itoa(i)})
+			for j := 0; j < p; j++ {
+				engine.Set("key"+strconv.Itoa(i)+"+"+strconv.Itoa(j), []byte("value1"+strconv.Itoa(j)), MetaData{"worker": strconv.Itoa(i)})
 			}
 			wg.Done()
 		}(i)
-
 	}
-
 	wg.Wait()
-	log.Print("-------- ", time.Since(now))
+	engine.Info()
+	log.Print(time.Since(now))
+	now = time.Now()
+
+	mt := &sync.RWMutex{}
+	m := map[string]bool{}
+	wg.Add(1)
+	t2 := strconv.Itoa(t1)
+	for i := 0; i < 20; i++ {
+		go func() {
+			for {
+				key, _, err := engine.PopWithMetadataV2("worker:" + t2)
+				// log.Print(key)
+				if err != nil && err.Error() == E_not_found {
+					continue
+				}
+				wg.Done()
+				// log.Print(key)
+				if err != nil {
+					panic(err)
+				}
+				mt.Lock()
+				_, has := m[key]
+				if has {
+					panic("existed " + key)
+				}
+				m[key] = true
+				log.Print(len(m))
+				mt.Unlock()
+			}
+		}()
+	}
+	wg.Wait()
+	log.Printf("%s - w %d p %d t %d ~ %f ms/req", time.Since(now).String(), w, p, t1, float32(time.Since(now).Milliseconds())/float32(p))
+
 }

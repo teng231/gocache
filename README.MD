@@ -4,6 +4,8 @@ Big Problems, if you build a system/app/service and want to cache data in memory
 
 I try using `bigcache`, `freecache` but it's not work memory so high after 10 days, and my pod restart by OOM Kill. Then i create this lib for resolve all issue
 
+Support `map` properties like `get/set/delete` and support more functions like `pop/popWithMetadata` like slice
+
 ## Installation
 
 ```bash
@@ -14,7 +16,6 @@ go get github.com/teng231/gocache
 
 ```go
 engine, _ := New(&Config{
-		Shard:       64,
 		OnRemove:    nil,
 		CleanWindow: time.Minute,
 		TTL:         12 * time.Hour,

@@ -1,9 +1,5 @@
 package gocache
 
-import (
-	"log"
-)
-
 // type hub struct {
 // 	s    []*string
 // 	lock *sync.RWMutex
@@ -72,7 +68,7 @@ func remove(keys []*string, key string) ([]*string, bool) {
 			continue
 		}
 		if *val == key {
-			log.Print("removed: ", key)
+			// log.Print("removed: ", key)
 			copy(keys[i:], keys[i+1:])
 			keys[len(keys)-1] = nil   // Erase last element (write zero value).
 			keys = keys[:len(keys)-1] // Truncate slice.

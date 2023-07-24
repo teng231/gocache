@@ -15,40 +15,31 @@ type Item struct {
 	ttlTime  int64
 }
 
-// type IEngine interface {
-// 	Len() int
-// 	Set(key string, value []byte) error
-// 	Keys() []string
-// 	Get(key string) ([]byte, error)
-// 	Pop() (string, []byte, error)
-// 	Delete(key string) error
-// 	Purge() error
-// }
-
 type Engine struct {
-	shardData   []*Shard
+	dataItems   map[string]*Item
 	lock        *sync.RWMutex
-	numberShard int
-	onRemove    func(key []byte, i *Item)
+	onRemove    func(key string, i *Item)
 	ttl         time.Duration
-	// keyhub      *hub
-	keylist []*string // key
+	keyPtrs     []*string
+	metaDataMap map[string][]*string
 }
 
-func setCleanWindow(cleanWindow time.Duration, shardData []*Shard, deleteHook func([]string)) {
+func (e *Engine) setCleanWindow(cleanWindow time.Duration, deleteHook func(key string, i *Item)) {
 	tick := time.NewTicker(cleanWindow)
 	go func() {
 		for {
 			<-tick.C
-			for _, shard := range shardData {
-				shard.lock.RLock()
-				keys := shard.iteratorExpire()
-				if len(keys) > 0 {
-					deleteHook(keys)
+			e.lock.Lock()
+			for key, item := range e.dataItems {
+				if !isExpired(item.ttlTime) {
+					continue
 				}
-				shard.lock.RUnlock()
+				e.delete(key)
+				if deleteHook != nil {
+					deleteHook(key, item)
+				}
 			}
-
+			e.lock.Unlock()
 		}
 	}()
 }
@@ -57,57 +48,42 @@ func New(cf *Config) (*Engine, error) {
 	if cf.CleanWindow <= 0 {
 		return nil, errors.New(E_not_found_clean_window)
 	}
-	if cf.Shard <= 0 || cf.Shard > 256 {
-		return nil, errors.New(E_shard_size_invalid)
-	}
 	if cf.TTL <= 0 {
 		return nil, errors.New(E_invalid_ttl)
 	}
-	shardData := make([]*Shard, 0, cf.Shard)
-	for i := 0; i < cf.Shard; i++ {
-		shardData = append(shardData, initShard(cf.OnRemove))
-	}
 
 	engine := &Engine{
-		shardData:   shardData,
+		dataItems:   make(map[string]*Item),
+		keyPtrs:     make([]*string, 0, 100),
 		lock:        new(sync.RWMutex),
-		numberShard: cf.Shard,
 		onRemove:    cf.OnRemove,
 		ttl:         cf.TTL,
-		// keyhub:      &hub{s: make([]*string, 0), lock: &sync.RWMutex{}},
-		keylist: make([]*string, 0),
+		metaDataMap: make(map[string][]*string),
 	}
-	setCleanWindow(cf.CleanWindow, shardData, func(keysDeleted []string) {
-		engine.lock.Lock()
-		for _, key := range keysDeleted {
-			engine.keylist, _ = remove(engine.keylist, key)
-		}
-		defer engine.lock.Lock()
-	})
+	engine.setCleanWindow(cf.CleanWindow, engine.onRemove)
 	return engine, nil
 }
 
 func (e *Engine) Len() int {
-	count := 0
-	for _, i := range e.shardData {
-		count += i.Count()
-	}
-	return count
+	e.lock.RLock()
+	defer e.lock.RUnlock()
+	return len(e.dataItems)
 }
 
 func (e *Engine) set(key string, value []byte, metaData ...MetaData) error {
-	pos := getPosition([]byte(key), e.numberShard)
 	item := &Item{
-		Value: value,
+		Value:   value,
+		ttlTime: time.Now().Unix() + int64(e.ttl.Seconds()),
 	}
 	if len(metaData) > 0 {
 		item.MetaData = &metaData[0]
+		for mkey, mval := range metaData[0] {
+			keyBuilder := mkey + ":" + mval
+			e.metaDataMap[keyBuilder] = append(e.metaDataMap[keyBuilder], &key)
+		}
 	}
-	isInsert := e.shardData[pos].Upsert(string(key), item, e.ttl)
-	if isInsert {
-		// e.keyhub.push(key)
-		e.keylist = append(e.keylist, &key)
-	}
+	e.dataItems[key] = item
+	e.keyPtrs = append(e.keyPtrs, &key)
 	return nil
 }
 
@@ -117,52 +93,63 @@ func (e *Engine) Set(key string, value []byte, metaData ...MetaData) error {
 	return e.set(key, value, metaData...)
 }
 
-func (e *Engine) get(key string) ([]byte, error) {
-	pos := getPosition([]byte(key), e.numberShard)
-	data, has := e.shardData[pos].Get(key)
+func (e *Engine) get(key string) (MetaData, []byte, error) {
+	data, has := e.dataItems[key]
 	if !has {
-		return nil, errors.New(E_not_found)
+		return nil, nil, errors.New(E_not_found)
 	}
-	return data.Value, nil
+	if isExpired(data.ttlTime) {
+		log.Print("EXPIRED")
+		e.delete(key)
+		return nil, nil, errors.New(E_not_found)
+	}
+	if data.MetaData == nil {
+		return nil, data.Value, nil
+	}
+	return *data.MetaData, data.Value, nil
 }
 
 func (e *Engine) Get(key string) ([]byte, error) {
 	e.lock.RLock()
 	defer e.lock.RUnlock()
-	return e.get(key)
-}
-
-func (e *Engine) getWithMetaData(key string) (MetaData, []byte, error) {
-	pos := getPosition([]byte(key), e.numberShard)
-	data, has := e.shardData[pos].Get(key)
-	if !has {
-		return nil, nil, errors.New(E_not_found)
-	}
-	return *data.MetaData, data.Value, nil
-}
-
-func (e *Engine) Pop() (string, []byte, error) {
-	e.lock.Lock()
-	defer e.lock.Unlock()
-
-	var key *string
-	e.keylist, key = pop(e.keylist)
-	if key == nil {
-		return "", nil, errors.New(E_queue_is_empty)
-	}
-	pos := getPosition([]byte(*key), e.numberShard)
-	data, has := e.shardData[pos].GetThenDelete(*key)
-	if !has {
-		log.Print("not found ", *key)
-		return "", nil, errors.New(E_not_found)
-	}
-	return *key, data.Value, nil
+	_, data, err := e.get(key)
+	return data, err
 }
 
 func (e *Engine) delete(key string) error {
-	pos := getPosition([]byte(key), e.numberShard)
-	e.keylist, _ = remove(e.keylist, key)
-	e.shardData[pos].Delete(key)
+	meta, _, err := e.get(key)
+	if err != nil {
+		return nil
+	}
+	if len(meta) > 0 {
+		for mkey, mval := range meta {
+			keyBuilder := mkey + ":" + mval
+			remove(e.metaDataMap[keyBuilder], keyBuilder)
+		}
+	}
+	delete(e.dataItems, key)
+	e.keyPtrs, _ = remove(e.keyPtrs, key)
+	if e.onRemove != nil {
+		e.onRemove(key, nil)
+	}
+	return nil
+}
+
+func (e *Engine) deleteData(key string) error {
+	meta, _, err := e.get(key)
+	if err != nil {
+		return nil
+	}
+	if len(meta) > 0 {
+		for mkey, mval := range meta {
+			keyBuilder := mkey + ":" + mval
+			remove(e.metaDataMap[keyBuilder], keyBuilder)
+		}
+	}
+	delete(e.dataItems, key)
+	if e.onRemove != nil {
+		e.onRemove(key, nil)
+	}
 	return nil
 }
 func (e *Engine) Delete(key string) error {
@@ -174,38 +161,91 @@ func (e *Engine) Delete(key string) error {
 func (e *Engine) Purge() error {
 	e.lock.Lock()
 	defer e.lock.Unlock()
-	for _, shard := range e.shardData {
-		shard.Purge()
-	}
-	e.keylist = make([]*string, 0)
+	e.keyPtrs = make([]*string, 0)
+	e.dataItems = make(map[string]*Item)
+	e.metaDataMap = make(map[string][]*string)
 	return nil
 }
 
 func (e *Engine) Info() error {
-	e.lock.Lock()
-	defer e.lock.Unlock()
-	log.Printf("data count: %d listkeys count: %d", e.Len(), len(e.keylist))
+	log.Printf("data count: %d listkeys count: %d", e.Len(), len(e.keyPtrs))
 	return nil
 }
 
-func (e *Engine) PopWithMetadata(key, matchVal string) (string, []byte, error) {
+// Pop so fast : because not scan, just pop key and get then delete after
+// pop not scare big map
+// pop time about < 10 micro secs per request
+func (e *Engine) Pop() (string, []byte, error) {
 	e.lock.Lock()
 	defer e.lock.Unlock()
-	for _, sPtr := range e.keylist {
+
+	var key *string
+	e.keyPtrs, key = pop(e.keyPtrs)
+	if key == nil {
+		return "", nil, errors.New(E_queue_is_empty)
+	}
+	_, data, err := e.get(*key)
+	if err != nil && err.Error() == E_not_found {
+		log.Print("not found ", *key)
+		return "", nil, err
+	}
+	e.deleteData(*key)
+	return *key, data, nil
+}
+
+// PopWithMetadata so slow : because scan all key
+// if number of keys so big > 50_000 can be slow
+// synchorization function, pop is atomic item
+func (e *Engine) PopWithMetadata(filter func(metadata MetaData) bool) (string, []byte, error) {
+	if filter == nil {
+		return "", nil, errors.New("invalid input")
+	}
+	e.lock.Lock()
+	defer e.lock.Unlock()
+	for _, sPtr := range e.keyPtrs {
 		if sPtr == nil {
 			log.Print("NILL")
 			break
 		}
-		metaData, val, err := e.getWithMetaData(*sPtr)
+		metaData, val, err := e.get(*sPtr)
 		if err != nil {
 			return *sPtr, val, err
 		}
-
-		if metaData[key] == matchVal {
+		if matched := filter(metaData); matched {
+			e.keyPtrs, _ = remove(e.keyPtrs, *sPtr)
 			e.delete(*sPtr)
 			return *sPtr, val, err
 		}
 	}
-	log.Println("NOT FOUND ", len(e.keylist))
+	return "", nil, errors.New(E_not_found)
+}
+
+// PopWithMetadataV2 only search metaMap
+// keyMaps like `<key>:<value>` ~ "worker:3" or "name:tom"
+// condition is AND beween all keymap
+func (e *Engine) PopWithMetadataV2(keyMaps ...string) (string, []byte, error) {
+	e.lock.Lock()
+	defer e.lock.Unlock()
+	countMap := make(map[string]int)
+	for _, keymap := range keyMaps {
+		if len(e.metaDataMap[keymap]) == 0 {
+			return "", nil, errors.New(E_not_found)
+		}
+		for _, sPtr := range e.metaDataMap[keymap] {
+			countMap[*sPtr]++
+		}
+	}
+
+	// Lặp qua map đếm để tìm giá trị chung đầu tiên
+	for key, value := range countMap {
+		if value == len(keyMaps) {
+			_, val, err := e.get(key)
+			if err != nil {
+				return "", nil, errors.New(E_not_found)
+			}
+			e.delete(key)
+			return key, val, nil
+		}
+	}
 	return "", nil, errors.New(E_not_found)
 }
