@@ -249,3 +249,29 @@ func (e *Engine) PopWithMetadataV2(keyMaps ...string) (string, []byte, error) {
 	}
 	return "", nil, errors.New(E_not_found)
 }
+
+func (e *Engine) LenWithMetadata(keyMaps ...string) int {
+	e.lock.RLock()
+	defer e.lock.RUnlock()
+	countMap := make(map[string]int)
+	for _, keymap := range keyMaps {
+		if len(e.metaDataMap[keymap]) == 0 {
+			return 0
+		}
+		for _, sPtr := range e.metaDataMap[keymap] {
+			countMap[*sPtr]++
+		}
+	}
+	total := 0
+	// Lặp qua map đếm để tìm giá trị chung đầu tiên
+	for key, value := range countMap {
+		if value == len(keyMaps) {
+			_, _, err := e.get(key)
+			if err != nil {
+				continue
+			}
+			total++
+		}
+	}
+	return total
+}
