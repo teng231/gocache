@@ -93,6 +93,19 @@ func (e *Engine) Set(key string, value []byte, metaData ...MetaData) error {
 	return e.set(key, value, metaData...)
 }
 
+// getForDelete fix issue circle get/delete
+// only get for delete do not action anything
+func (e *Engine) getForDelete(key string) (MetaData, []byte, error) {
+	data, has := e.dataItems[key]
+	if !has {
+		return nil, nil, errors.New(E_not_found)
+	}
+	if data.MetaData == nil {
+		return nil, data.Value, nil
+	}
+	return *data.MetaData, data.Value, nil
+}
+
 func (e *Engine) get(key string) (MetaData, []byte, error) {
 	data, has := e.dataItems[key]
 	if !has {
@@ -117,7 +130,7 @@ func (e *Engine) Get(key string) ([]byte, error) {
 }
 
 func (e *Engine) delete(key string) error {
-	meta, _, err := e.get(key)
+	meta, _, err := e.getForDelete(key)
 	if err != nil {
 		return nil
 	}
@@ -136,7 +149,7 @@ func (e *Engine) delete(key string) error {
 }
 
 func (e *Engine) deleteData(key string) error {
-	meta, _, err := e.get(key)
+	meta, _, err := e.getForDelete(key)
 	if err != nil {
 		return nil
 	}

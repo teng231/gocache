@@ -573,3 +573,53 @@ func TestRWConcurentPopV2GetSetHashCore(t *testing.T) {
 	log.Printf("%s - w %d p %d t %d ~ %f ms/req", time.Since(now).String(), w, p, t1, float32(time.Since(now).Milliseconds())/float32(p))
 
 }
+
+func TestGetSet(t *testing.T) {
+	engine, err := New(&Config{
+		TTL:         1 * time.Second,
+		CleanWindow: 1 * time.Second,
+	})
+
+	if err != nil {
+		panic(err)
+	}
+	wg := &sync.WaitGroup{}
+	noww := time.Now()
+	wg.Add(10)
+	for i := 0; i < 10; i++ {
+		go func(i int) {
+			for j := 0; j < 10_000; j++ {
+				engine.Set("key"+strconv.Itoa(i)+"+"+strconv.Itoa(j), []byte(`{
+					"id": 496,
+					"city": null,
+					"jobTitle": "network engineer",
+					"jobCategory": "engineer",
+					"jobFocus": null,
+					"level": null,
+					"yearOfExperience": 1,
+					"yearOfReceivedCompensation": "2023",
+					"monthlyBaseSalary": 9,
+					"annualExpectedBonus": 0,
+					"signingBonus": 0,
+					"bonusMemo": null,
+					"otherBenefits": null,
+					"createdAt": "2023-03-07T08:25:23.000Z",
+					"totalCompensation": 108,
+					"verified": false,
+					"companyId": 245,
+					"companyName": "CMC TSSG",
+					"companySlug": "cmc-tssg"
+				}`))
+			}
+			wg.Done()
+		}(i)
+	}
+
+	wg.Wait()
+	log.Print(time.Since(noww))
+	engine.Info()
+	printAlloc()
+	runtime.KeepAlive(engine) // Keeps a reference to m so that the map isn’t collected
+	time.Sleep(3 * time.Second)
+	printAlloc()
+}
