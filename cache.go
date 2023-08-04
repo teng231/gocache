@@ -275,6 +275,9 @@ func (e *Engine) LenWithMetadata(keyMaps ...string) int {
 			return 0
 		}
 		for _, sPtr := range e.metaDataMap[keymap] {
+			if sPtr == nil {
+				continue
+			}
 			countMap[*sPtr]++
 		}
 	}
