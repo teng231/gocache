@@ -137,7 +137,7 @@ func (e *Engine) delete(key string) error {
 	if len(meta) > 0 {
 		for mkey, mval := range meta {
 			keyBuilder := mkey + ":" + mval
-			remove(e.metaDataMap[keyBuilder], keyBuilder)
+			remove(e.metaDataMap[keyBuilder], key)
 		}
 	}
 	delete(e.dataItems, key)
@@ -156,7 +156,7 @@ func (e *Engine) deleteData(key string) error {
 	if len(meta) > 0 {
 		for mkey, mval := range meta {
 			keyBuilder := mkey + ":" + mval
-			remove(e.metaDataMap[keyBuilder], keyBuilder)
+			remove(e.metaDataMap[keyBuilder], key)
 		}
 	}
 	delete(e.dataItems, key)
@@ -181,7 +181,7 @@ func (e *Engine) Purge() error {
 }
 
 func (e *Engine) Info() error {
-	log.Printf("data count: %d listkeys count: %d", e.Len(), len(e.keyPtrs))
+	log.Printf("data count: %d listkeys count: %d, len keymap %d", e.Len(), len(e.keyPtrs), len(e.metaDataMap))
 	return nil
 }
 
@@ -242,9 +242,12 @@ func (e *Engine) PopWithMetadataV2(keyMaps ...string) (string, []byte, error) {
 	countMap := make(map[string]int)
 	for _, keymap := range keyMaps {
 		if len(e.metaDataMap[keymap]) == 0 {
-			return "", nil, errors.New(E_not_found)
+			return "", nil, errors.New(E_not_found_keymap)
 		}
 		for _, sPtr := range e.metaDataMap[keymap] {
+			if sPtr == nil {
+				continue
+			}
 			countMap[*sPtr]++
 		}
 	}
@@ -260,7 +263,7 @@ func (e *Engine) PopWithMetadataV2(keyMaps ...string) (string, []byte, error) {
 			return key, val, nil
 		}
 	}
-	return "", nil, errors.New(E_not_found)
+	return "", nil, errors.New(E_queue_is_empty)
 }
 
 func (e *Engine) LenWithMetadata(keyMaps ...string) int {

@@ -511,10 +511,11 @@ func TestRWConcurentScanGetSetHashCore(t *testing.T) {
 // 7.831917ms - w 120 p 100 t 92 ~ 0.070000 ms/req
 // 5.887451166s - w 1200 p 1000 t 400 ~ 5.887000 ms/req
 // 10.526208ms - w 120 p 100 t 40 ~ 0.100000 ms/req
+// new: 3.108083ms - w 120 p 100 t 40 ~ 0.030000 ms/req
 func TestRWConcurentPopV2GetSetHashCore(t *testing.T) {
 	engine, err := New(&Config{
 		TTL:         100 * time.Second,
-		CleanWindow: 100 * time.Second,
+		CleanWindow: 2 * time.Second,
 	})
 	if err != nil {
 		panic(err)
@@ -543,7 +544,7 @@ func TestRWConcurentPopV2GetSetHashCore(t *testing.T) {
 
 	mt := &sync.RWMutex{}
 	m := map[string]bool{}
-	wg.Add(1)
+	wg.Add(100)
 	t2 := strconv.Itoa(t1)
 	for i := 0; i < 20; i++ {
 		go func() {
@@ -570,6 +571,7 @@ func TestRWConcurentPopV2GetSetHashCore(t *testing.T) {
 		}()
 	}
 	wg.Wait()
+	log.Print(len(m))
 	log.Printf("%s - w %d p %d t %d ~ %f ms/req", time.Since(now).String(), w, p, t1, float32(time.Since(now).Milliseconds())/float32(p))
 
 }
@@ -622,4 +624,66 @@ func TestGetSet(t *testing.T) {
 	runtime.KeepAlive(engine) // Keeps a reference to m so that the map isn’t collected
 	time.Sleep(3 * time.Second)
 	printAlloc()
+}
+
+func TestSimplePopWithMetadata(t *testing.T) {
+	engine, err := New(&Config{
+		TTL:         5 * time.Second,
+		CleanWindow: 1 * time.Second,
+	})
+
+	if err != nil {
+		panic(err)
+	}
+	wg := &sync.WaitGroup{}
+	noww := time.Now()
+	wg.Add(20)
+	for i := 0; i < 20; i++ {
+		go func(i int) {
+			for j := 0; j < 50; j++ {
+				engine.Set("key"+strconv.Itoa(i)+"+"+strconv.Itoa(j), []byte(`{
+					"id": 496,
+					"city": null,
+					"jobTitle": "network engineer",
+					"jobCategory": "engineer",
+					"jobFocus": null,
+					"level": null,
+					"yearOfExperience": 1,
+					"yearOfReceivedCompensation": "2023",
+					"monthlyBaseSalary": 9,
+					"annualExpectedBonus": 0,
+					"signingBonus": 0,
+					"bonusMemo": null,
+					"otherBenefits": null,
+					"createdAt": "2023-03-07T08:25:23.000Z",
+					"totalCompensation": 108,
+					"verified": false,
+					"companyId": 245,
+					"companyName": "CMC TSSG",
+					"companySlug": "cmc-tssg"
+				}`), MetaData{"worker": strconv.Itoa(j)})
+			}
+			wg.Done()
+		}(i)
+	}
+
+	wg.Wait()
+	log.Print(time.Since(noww))
+	engine.Info()
+
+	for i := 0; i < 10; i++ {
+		key, _, err := engine.PopWithMetadataV2("worker:3")
+		if err != nil {
+			panic(err)
+		}
+		log.Print(key, err)
+	}
+	for i := 0; i < 10; i++ {
+		key, _, err := engine.PopWithMetadataV2("worker:3")
+		if err != nil {
+			panic(err)
+		}
+		log.Print(key, err)
+	}
+
 }
