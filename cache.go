@@ -40,6 +40,7 @@ func (e *Engine) setCleanWindow(cleanWindow time.Duration, deleteHook func(key s
 				}
 			}
 			e.lock.Unlock()
+			e.Info()
 		}
 	}()
 }
