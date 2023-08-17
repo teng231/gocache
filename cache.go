@@ -24,22 +24,26 @@ type Engine struct {
 	metaDataMap map[string][]*string
 }
 
+func (e *Engine) CleanWindow(deleteHook func(key string, i *Item)) {
+	e.lock.Lock()
+	defer e.lock.Unlock()
+	for key, item := range e.dataItems {
+		if !isExpired(item.ttlTime) {
+			continue
+		}
+		e.delete(key)
+		if deleteHook != nil {
+			deleteHook(key, item)
+		}
+	}
+}
+
 func (e *Engine) setCleanWindow(cleanWindow time.Duration, deleteHook func(key string, i *Item)) {
 	tick := time.NewTicker(cleanWindow)
 	go func() {
 		for {
 			<-tick.C
-			e.lock.Lock()
-			for key, item := range e.dataItems {
-				if !isExpired(item.ttlTime) {
-					continue
-				}
-				e.delete(key)
-				if deleteHook != nil {
-					deleteHook(key, item)
-				}
-			}
-			e.lock.Unlock()
+			e.CleanWindow(deleteHook)
 			e.Info()
 		}
 	}()
