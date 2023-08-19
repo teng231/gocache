@@ -35,31 +35,37 @@ package gocache
 // 	return len(h.s)
 // }
 
-// func (h *hub) remove(key string) bool {
-// 	if h.len() == 0 {
-// 		return true
+// func remove(keys []*string, key string) ([]*string, bool) {
+// 	if len(keys) == 0 {
+// 		return keys, false
 // 	}
-// 	h.lock.Lock()
-// 	defer h.lock.Unlock()
-// 	for i, val := range h.s {
+// 	for i, val := range keys {
 // 		if val == nil {
 // 			continue
 // 		}
 // 		if *val == key {
-// 			log.Print("removed: ", key)
-// 			copy(h.s[i:], h.s[i+1:])
-// 			h.s[len(h.s)-1] = nil  // Erase last element (write zero value).
-// 			h.s = h.s[:len(h.s)-1] // Truncate slice.
-// 			return true
+// 			// log.Print("removed: ", key)
+// 			copy(keys[i:], keys[i+1:])
+// 			keys[len(keys)-1] = nil   // Erase last element (write zero value).
+// 			keys = keys[:len(keys)-1] // Truncate slice.
+// 			return keys, true
 // 		}
 // 	}
-// 	log.Print("not removed: ", key)
-// 	return false
+// 	return keys, false
+// }
+// func pop(keys []*string) ([]*string, *string) {
+// 	if len(keys) == 0 {
+// 		return keys, nil
+// 	}
+// 	out := keys[0]
+// 	keys[0] = nil
+// 	keys2 := append([]*string{}, keys[1:]...)
+// 	return keys2, out
 // }
 
 // -------------- standalone code ---------
 
-func remove(keys []*string, key string) ([]*string, bool) {
+func removeV2(keys []*string, key string) ([]*string, bool) {
 	if len(keys) == 0 {
 		return keys, false
 	}
@@ -68,22 +74,17 @@ func remove(keys []*string, key string) ([]*string, bool) {
 			continue
 		}
 		if *val == key {
-			// log.Print("removed: ", key)
-			copy(keys[i:], keys[i+1:])
-			keys[len(keys)-1] = nil   // Erase last element (write zero value).
-			keys = keys[:len(keys)-1] // Truncate slice.
-			return keys, true
+			keys2, _ := popV2(keys, i)
+			return keys2, true
 		}
 	}
 	return keys, false
 }
 
-func pop(keys []*string) ([]*string, *string) {
-	if len(keys) == 0 {
-		return keys, nil
+func popV2(slice []*string, index int) ([]*string, *string) {
+	if index < 0 || index >= len(slice) {
+		return slice, nil // index out of range
 	}
-	out := keys[0]
-	keys[0] = nil
-	keys = keys[1:]
-	return keys, out
+	element := slice[index]
+	return append(slice[:index], slice[index+1:]...), element
 }

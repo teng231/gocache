@@ -7,4 +7,5 @@ const (
 	E_shard_size_invalid     = "shard size need > 0 and <= 256"
 	E_queue_is_empty         = "queue is empty"
 	E_not_found_keymap       = "not_found_keymap"
+	E_not_found_expired      = "not_found_expired"
 )

@@ -13,24 +13,32 @@ import (
 func TestPopExpired(t *testing.T) {
 	engine, err := New(&Config{
 		TTL:         1 * time.Second,
-		CleanWindow: 4 * time.Second,
+		CleanWindow: 2 * time.Second,
 	})
 	if err != nil {
 		panic(err)
 	}
 	log.Print("okeee")
-	for j := 0; j < 100; j++ {
+
+	for j := 0; j < 350; j++ {
 		engine.Set("key"+strconv.Itoa(j)+"+"+strconv.Itoa(j), []byte("value1"+strconv.Itoa(j)))
 	}
-	time.Sleep(2 * time.Second)
-	log.Print("-----------------")
-	engine.Info()
-	for i := 0; i < 102; i++ {
-		key, data, err := engine.Pop()
-		log.Print(key, err, string(data))
-		engine.Info()
-	}
+	time.Sleep(1500 * time.Millisecond)
+	log.Print(engine.Keys())
 
+	for j := 350; j < 700; j++ {
+		engine.Set("key"+strconv.Itoa(j)+"+"+strconv.Itoa(j), []byte("value1"+strconv.Itoa(j)))
+	}
+	time.Sleep(2900 * time.Millisecond)
+	log.Print("-----------------")
+	// engine.CleanWindow(nil)
+
+	// for i := 0; i < 100; i++ {
+	// 	key, data, err := engine.Pop()
+	// 	log.Print(key, err, string(data))
+	// 	engine.Info()
+	// }
+	log.Print(engine.Keys())
 }
 
 // 11.292343625s 1000000

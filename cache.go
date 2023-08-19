@@ -36,6 +36,31 @@ func (e *Engine) CleanWindow(deleteHook func(key string, i *Item)) {
 			deleteHook(key, item)
 		}
 	}
+	log.Print("clear done")
+}
+
+func (e *Engine) Keys() []string {
+	e.lock.RLock()
+	defer e.lock.RUnlock()
+
+	out := make([]string, 0)
+
+	for _, key := range e.keyPtrs {
+		out = append(out, *key)
+	}
+	return out
+}
+
+func (e *Engine) DataItems() map[string]int64 {
+	e.lock.RLock()
+	defer e.lock.RUnlock()
+
+	out := make(map[string]int64)
+
+	for key, d := range e.dataItems {
+		out[key] = d.ttlTime
+	}
+	return out
 }
 
 func (e *Engine) setCleanWindow(cleanWindow time.Duration, deleteHook func(key string, i *Item)) {
@@ -119,7 +144,7 @@ func (e *Engine) get(key string) (MetaData, []byte, error) {
 	if isExpired(data.ttlTime) {
 		log.Print("EXPIRED")
 		e.delete(key)
-		return nil, nil, errors.New(E_not_found)
+		return nil, nil, errors.New(E_not_found_expired)
 	}
 	if data.MetaData == nil {
 		return nil, data.Value, nil
@@ -142,11 +167,11 @@ func (e *Engine) delete(key string) error {
 	if len(meta) > 0 {
 		for mkey, mval := range meta {
 			keyBuilder := mkey + ":" + mval
-			remove(e.metaDataMap[keyBuilder], key)
+			removeV2(e.metaDataMap[keyBuilder], key)
 		}
 	}
 	delete(e.dataItems, key)
-	e.keyPtrs, _ = remove(e.keyPtrs, key)
+	e.keyPtrs, _ = removeV2(e.keyPtrs, key)
 	if e.onRemove != nil {
 		e.onRemove(key, nil)
 	}
@@ -161,7 +186,7 @@ func (e *Engine) deleteData(key string) error {
 	if len(meta) > 0 {
 		for mkey, mval := range meta {
 			keyBuilder := mkey + ":" + mval
-			remove(e.metaDataMap[keyBuilder], key)
+			removeV2(e.metaDataMap[keyBuilder], key)
 		}
 	}
 	delete(e.dataItems, key)
@@ -198,15 +223,20 @@ func (e *Engine) Pop() (string, []byte, error) {
 	defer e.lock.Unlock()
 
 	var key *string
-	e.keyPtrs, key = pop(e.keyPtrs)
+	e.keyPtrs, key = popV2(e.keyPtrs, 0)
 	if key == nil {
 		return "", nil, errors.New(E_queue_is_empty)
 	}
 	_, data, err := e.get(*key)
+	if err != nil && err.Error() == E_not_found_expired {
+		log.Print("not found expire ", *key)
+		return "", nil, err
+	}
 	if err != nil && err.Error() == E_not_found {
 		log.Print("not found ", *key)
 		return "", nil, err
 	}
+
 	e.deleteData(*key)
 	return *key, data, nil
 }
@@ -222,15 +252,18 @@ func (e *Engine) PopWithMetadata(filter func(metadata MetaData) bool) (string, [
 	defer e.lock.Unlock()
 	for _, sPtr := range e.keyPtrs {
 		if sPtr == nil {
-			log.Print("NILL")
-			break
+			log.Print("NILL something wrong")
+			continue
 		}
 		metaData, val, err := e.get(*sPtr)
-		if err != nil {
-			return *sPtr, val, err
+		if err != nil && err.Error() == E_not_found_expired {
+			continue
+		}
+		if err != nil && err.Error() == E_not_found {
+			continue
 		}
 		if matched := filter(metaData); matched {
-			e.keyPtrs, _ = remove(e.keyPtrs, *sPtr)
+			e.keyPtrs, _ = removeV2(e.keyPtrs, *sPtr)
 			e.delete(*sPtr)
 			return *sPtr, val, err
 		}
