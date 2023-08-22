@@ -113,6 +113,8 @@ func (e *Engine) set(key string, value []byte, metaData ...MetaData) error {
 		}
 	}
 	e.dataItems[key] = item
+	// issue duplicate key
+	e.keyPtrs, _ = removeV2(e.keyPtrs, key)
 	e.keyPtrs = append(e.keyPtrs, &key)
 	return nil
 }
@@ -244,32 +246,32 @@ func (e *Engine) Pop() (string, []byte, error) {
 // PopWithMetadata so slow : because scan all key
 // if number of keys so big > 50_000 can be slow
 // synchorization function, pop is atomic item
-func (e *Engine) PopWithMetadata(filter func(metadata MetaData) bool) (string, []byte, error) {
-	if filter == nil {
-		return "", nil, errors.New("invalid input")
-	}
-	e.lock.Lock()
-	defer e.lock.Unlock()
-	for _, sPtr := range e.keyPtrs {
-		if sPtr == nil {
-			log.Print("NILL something wrong")
-			continue
-		}
-		metaData, val, err := e.get(*sPtr)
-		if err != nil && err.Error() == E_not_found_expired {
-			continue
-		}
-		if err != nil && err.Error() == E_not_found {
-			continue
-		}
-		if matched := filter(metaData); matched {
-			e.keyPtrs, _ = removeV2(e.keyPtrs, *sPtr)
-			e.delete(*sPtr)
-			return *sPtr, val, err
-		}
-	}
-	return "", nil, errors.New(E_not_found)
-}
+// func (e *Engine) PopWithMetadata(filter func(metadata MetaData) bool) (string, []byte, error) {
+// 	if filter == nil {
+// 		return "", nil, errors.New("invalid input")
+// 	}
+// 	e.lock.Lock()
+// 	defer e.lock.Unlock()
+// 	for _, sPtr := range e.keyPtrs {
+// 		if sPtr == nil {
+// 			log.Print("NILL something wrong")
+// 			continue
+// 		}
+// 		metaData, val, err := e.get(*sPtr)
+// 		if err != nil && err.Error() == E_not_found_expired {
+// 			continue
+// 		}
+// 		if err != nil && err.Error() == E_not_found {
+// 			continue
+// 		}
+// 		if matched := filter(metaData); matched {
+// 			// e.keyPtrs, _ = removeV2(e.keyPtrs, *sPtr)
+// 			e.delete(*sPtr)
+// 			return *sPtr, val, err
+// 		}
+// 	}
+// 	return "", nil, errors.New(E_not_found)
+// }
 
 // PopWithMetadataV2 only search metaMap
 // keyMaps like `<key>:<value>` ~ "worker:3" or "name:tom"
@@ -294,8 +296,14 @@ func (e *Engine) PopWithMetadataV2(keyMaps ...string) (string, []byte, error) {
 	for key, value := range countMap {
 		if value == len(keyMaps) {
 			_, val, err := e.get(key)
-			if err != nil {
-				return "", nil, errors.New(E_not_found)
+			// if err != nil {
+			// 	return "", nil, errors.New(E_not_found)
+			// }
+			if err != nil && err.Error() == E_not_found_expired {
+				continue
+			}
+			if err != nil && err.Error() == E_not_found {
+				continue
 			}
 			e.delete(key)
 			return key, val, nil

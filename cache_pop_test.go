@@ -343,3 +343,44 @@ func TestRWConcurentPopGetHashCore(t *testing.T) {
 	wg.Wait()
 	log.Print(time.Since(now), " ", a)
 }
+
+func TestPopExpired2(t *testing.T) {
+	engine, err := New(&Config{
+		TTL:         1 * time.Second,
+		CleanWindow: 100 * time.Second,
+	})
+	if err != nil {
+		panic(err)
+	}
+	log.Print("okeee")
+
+	for j := 0; j < 100; j++ {
+		engine.Set("key"+strconv.Itoa(j), []byte("value1"+strconv.Itoa(j)))
+	}
+	time.Sleep(500 * time.Millisecond)
+	// engine.CleanWindow(nil)
+	log.Print("++++0 :", engine.Keys())
+
+	for j := 50; j < 120; j++ {
+		engine.Set("key"+strconv.Itoa(j), []byte("value1"+strconv.Itoa(j)))
+	}
+	log.Print("+++++1 :", engine.Keys())
+	time.Sleep(1005 * time.Millisecond)
+	log.Print("-----------------")
+	engine.CleanWindow(nil)
+	log.Print("+++++2 :", engine.Keys())
+
+	for i := 0; i < 100; i++ {
+		key, data, err := engine.Pop()
+		log.Print(key, err, string(data))
+		// engine.Info()
+	}
+	log.Print(engine.Keys())
+}
+
+func TestTime(t *testing.T) {
+	log.Print(time.Second.Seconds())
+	if time.Second != 1000*time.Millisecond {
+		panic("shit")
+	}
+}

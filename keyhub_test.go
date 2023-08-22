@@ -1,7 +1,10 @@
 package gocache
 
 import (
+	"encoding/json"
+	"log"
 	"reflect"
+	"strconv"
 	"testing"
 )
 
@@ -86,4 +89,37 @@ func TestPopV2(t *testing.T) {
 	if popped != expectedPopped {
 		t.Errorf("Expected popped value: %v, but got: %v", expectedPopped, popped)
 	}
+}
+
+func TestPopV3(t *testing.T) {
+	in := []*string{}
+	for i := 0; i < 200; i++ {
+		key := "key:" + strconv.Itoa(i)
+		in = append(in, &key)
+	}
+
+	for i := 0; i < 100; i++ {
+		var item *string
+		in, item = popV2(in, 0)
+		log.Print("pop ", *item)
+	}
+	out, _ := json.MarshalIndent(in, "", " ")
+	log.Print(string(out))
+}
+
+func TestPopRemoveV3(t *testing.T) {
+	in := []*string{}
+	for i := 0; i < 200; i++ {
+		key := "key:" + strconv.Itoa(i)
+		in = append(in, &key)
+	}
+
+	for i := 0; i < 100; i++ {
+		var item *string
+		idex := i + 1
+		in, item = popV2(in, idex)
+		log.Print("pop ", *item)
+	}
+	out, _ := json.MarshalIndent(in, "", " ")
+	log.Print(string(out))
 }

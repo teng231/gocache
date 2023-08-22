@@ -139,70 +139,70 @@ func TestRWConcurentGetSetHashCore(t *testing.T) {
 // 152.986875ms - w 120 p 100 t 92 ~ 1.520000 ms/req
 
 // 141.794791ms - w 120 p 100 t 40 ~ 1.410000 ms/req
-func TestRWConcurentScanGetSetHashCore(t *testing.T) {
-	engine, err := New(&Config{
-		TTL:         100 * time.Second,
-		CleanWindow: 1 * time.Second,
-	})
-	if err != nil {
-		panic(err)
-	}
-	log.Print("okeee")
+// func TestRWConcurentScanGetSetHashCore(t *testing.T) {
+// 	engine, err := New(&Config{
+// 		TTL:         100 * time.Second,
+// 		CleanWindow: 1 * time.Second,
+// 	})
+// 	if err != nil {
+// 		panic(err)
+// 	}
+// 	log.Print("okeee")
 
-	now := time.Now()
-	// log.Print(engine.Len(), " ")
-	wg := &sync.WaitGroup{}
-	w := 120
-	p := 100
-	t1 := 40
-	wg.Add(w)
-	for i := 0; i < w; i++ {
-		go func(i int) {
-			for j := 0; j < p; j++ {
-				engine.Set("key"+strconv.Itoa(i)+"+"+strconv.Itoa(j), []byte("value1"+strconv.Itoa(j)), MetaData{"worker": strconv.Itoa(i)})
-			}
-			wg.Done()
-		}(i)
-	}
-	wg.Wait()
-	engine.Info()
-	log.Print(time.Since(now))
-	now = time.Now()
+// 	now := time.Now()
+// 	// log.Print(engine.Len(), " ")
+// 	wg := &sync.WaitGroup{}
+// 	w := 120
+// 	p := 100
+// 	t1 := 40
+// 	wg.Add(w)
+// 	for i := 0; i < w; i++ {
+// 		go func(i int) {
+// 			for j := 0; j < p; j++ {
+// 				engine.Set("key"+strconv.Itoa(i)+"+"+strconv.Itoa(j), []byte("value1"+strconv.Itoa(j)), MetaData{"worker": strconv.Itoa(i)})
+// 			}
+// 			wg.Done()
+// 		}(i)
+// 	}
+// 	wg.Wait()
+// 	engine.Info()
+// 	log.Print(time.Since(now))
+// 	now = time.Now()
 
-	mt := &sync.RWMutex{}
-	m := map[string]bool{}
-	wg.Add(p)
-	t2 := strconv.Itoa(t1)
-	for i := 0; i < 20; i++ {
-		go func() {
-			for {
-				key, _, err := engine.PopWithMetadata(func(metadata MetaData) bool {
-					return metadata["worker"] == t2
-				})
-				// log.Print(key)
-				if err != nil && err.Error() == E_not_found {
-					continue
-				}
-				wg.Done()
-				// log.Print(key)
-				if err != nil {
-					panic(err)
-				}
-				mt.Lock()
-				_, has := m[key]
-				if has {
-					panic("existed " + key)
-				}
-				m[key] = true
-				log.Print(len(m))
-				mt.Unlock()
-			}
-		}()
-	}
-	wg.Wait()
-	log.Printf("%s - w %d p %d t %d ~ %f ms/req", time.Since(now).String(), w, p, t1, float32(time.Since(now).Milliseconds())/float32(p))
+// 	mt := &sync.RWMutex{}
+// 	m := map[string]bool{}
+// 	wg.Add(p)
+// 	t2 := strconv.Itoa(t1)
+// 	for i := 0; i < 20; i++ {
+// 		go func() {
+// 			for {
+// 				key, _, err := engine.PopWithMetadata(func(metadata MetaData) bool {
+// 					return metadata["worker"] == t2
+// 				})
+// 				// log.Print(key)
+// 				if err != nil && err.Error() == E_not_found {
+// 					continue
+// 				}
+// 				wg.Done()
+// 				// log.Print(key)
+// 				if err != nil {
+// 					panic(err)
+// 				}
+// 				mt.Lock()
+// 				_, has := m[key]
+// 				if has {
+// 					panic("existed " + key)
+// 				}
+// 				m[key] = true
+// 				log.Print(len(m))
+// 				mt.Unlock()
+// 			}
+// 		}()
+// 	}
+// 	wg.Wait()
+// 	log.Printf("%s - w %d p %d t %d ~ %f ms/req", time.Since(now).String(), w, p, t1, float32(time.Since(now).Milliseconds())/float32(p))
 
-}
+// }
 
 // 7.831917ms - w 120 p 100 t 92 ~ 0.070000 ms/req
 // 5.887451166s - w 1200 p 1000 t 400 ~ 5.887000 ms/req
