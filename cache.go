@@ -36,7 +36,7 @@ func (e *Engine) CleanWindow(deleteHook func(key string, i *Item)) {
 			deleteHook(key, item)
 		}
 	}
-	log.Print("clear done")
+	// log.Print("clear done")
 }
 
 func (e *Engine) Keys() []string {
@@ -212,9 +212,12 @@ func (e *Engine) Purge() error {
 	return nil
 }
 
-func (e *Engine) Info() error {
-	log.Printf("data count: %d listkeys count: %d, len keymap %d", e.Len(), len(e.keyPtrs), len(e.metaDataMap))
-	return nil
+func (e *Engine) Info() map[string]any {
+	return map[string]any{
+		"len":         e.Len(),
+		"keyPtrsLen":  len(e.keyPtrs),
+		"metadataLen": len(e.metaDataMap),
+	}
 }
 
 // Pop so fast : because not scan, just pop key and get then delete after
