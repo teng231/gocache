@@ -168,7 +168,7 @@ func (e *Engine) delete(key string) error {
 	if len(meta) > 0 {
 		for mkey, mval := range meta {
 			keyBuilder := mkey + ":" + mval
-			removeV2(e.metaDataMap[keyBuilder], key)
+			e.metaDataMap[keyBuilder], _ = removeV2(e.metaDataMap[keyBuilder], key)
 		}
 	}
 	delete(e.dataItems, key)
@@ -187,7 +187,7 @@ func (e *Engine) deleteData(key string) error {
 	if len(meta) > 0 {
 		for mkey, mval := range meta {
 			keyBuilder := mkey + ":" + mval
-			removeV2(e.metaDataMap[keyBuilder], key)
+			e.metaDataMap[keyBuilder], _ = removeV2(e.metaDataMap[keyBuilder], key)
 		}
 	}
 	delete(e.dataItems, key)
@@ -278,6 +278,7 @@ func (e *Engine) Pop() (string, []byte, error) {
 // PopWithMetadataV2 only search metaMap
 // keyMaps like `<key>:<value>` ~ "worker:3" or "name:tom"
 // condition is AND beween all keymap
+// response: key, value, error
 func (e *Engine) PopWithMetadataV2(keyMaps ...string) (string, []byte, error) {
 	e.lock.Lock()
 	defer e.lock.Unlock()
@@ -293,14 +294,10 @@ func (e *Engine) PopWithMetadataV2(keyMaps ...string) (string, []byte, error) {
 			countMap[*sPtr]++
 		}
 	}
-
 	// Lặp qua map đếm để tìm giá trị chung đầu tiên
 	for key, value := range countMap {
 		if value == len(keyMaps) {
 			_, val, err := e.get(key)
-			// if err != nil {
-			// 	return "", nil, errors.New(E_not_found)
-			// }
 			if err != nil && err.Error() == E_not_found_expired {
 				continue
 			}
@@ -315,8 +312,8 @@ func (e *Engine) PopWithMetadataV2(keyMaps ...string) (string, []byte, error) {
 }
 
 func (e *Engine) LenWithMetadata(keyMaps ...string) int {
-	e.lock.RLock()
-	defer e.lock.RUnlock()
+	e.lock.Lock()
+	defer e.lock.Unlock()
 	countMap := make(map[string]int)
 	for _, keymap := range keyMaps {
 		if len(e.metaDataMap[keymap]) == 0 {

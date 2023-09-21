@@ -405,3 +405,72 @@ func TestTime(t *testing.T) {
 		panic("shit")
 	}
 }
+
+func TestPopLen(t *testing.T) {
+	engine, err := New(&Config{
+		TTL:         100 * time.Second,
+		CleanWindow: 100 * time.Second,
+	})
+	if err != nil {
+		panic(err)
+	}
+	log.Print("okeee")
+	// log.Print(engine.Len(), " ")
+	// buf := make(chan string, 10000)
+
+	wg := &sync.WaitGroup{}
+
+	wg.Add(10)
+	for i := 0; i < 10; i++ {
+		go func(i int) {
+			for j := 0; j < 20; j++ {
+
+				engine.Set("key"+strconv.Itoa(i)+"+"+strconv.Itoa(j), []byte("value"+strconv.Itoa(j)), MetaData{
+					"worker": strconv.Itoa(i),
+				})
+			}
+			wg.Done()
+		}(i)
+	}
+
+	wg.Wait()
+	log.Print(engine.Info())
+	len := engine.LenWithMetadata("worker:4")
+	log.Print("len ", len)
+	// mt := &sync.Mutex{}
+	// m := map[string]bool{}
+
+	for i := 0; i < 3; i++ {
+		key, val, err := engine.PopWithMetadataV2("worker:4")
+		if err != nil {
+			log.Print("NILLL", err)
+			continue
+		}
+		log.Print(key, "---", string(val))
+	}
+
+	// wg.Add(10)
+	// for i := 0; i < 10; i++ {
+	// 	go func() {
+	// 		for j := 0; j < 30; j++ {
+	// 			key, val, err := engine.PopWithMetadataV2("worker:4")
+	// 			if err != nil {
+	// 				log.Print("NILLL", err)
+	// 				continue
+	// 			}
+	// 			log.Print(key, "---", string(val))
+	// 			// mt.Lock()
+	// 			// _, has := m[key]
+	// 			// if has {
+	// 			// 	panic("existed " + string(data) + " " + key)
+	// 			// }
+	// 			// m[key] = true
+	// 			// mt.Unlock()
+	// 		}
+	// 		wg.Done()
+	// 	}()
+	// }
+	// wg.Wait()
+	len = engine.LenWithMetadata("worker:4")
+	log.Print("len ", len)
+}
