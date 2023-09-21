@@ -75,9 +75,6 @@ func (e *Engine) setCleanWindow(cleanWindow time.Duration, deleteHook func(key s
 }
 
 func New(cf *Config) (*Engine, error) {
-	if cf.CleanWindow <= 0 {
-		return nil, errors.New(E_not_found_clean_window)
-	}
 	if cf.TTL <= 0 {
 		return nil, errors.New(E_invalid_ttl)
 	}
@@ -90,7 +87,9 @@ func New(cf *Config) (*Engine, error) {
 		ttl:         cf.TTL,
 		metaDataMap: make(map[string][]*string),
 	}
-	engine.setCleanWindow(cf.CleanWindow, engine.onRemove)
+	if cf.CleanWindow > 0 {
+		engine.setCleanWindow(cf.CleanWindow, engine.onRemove)
+	}
 	return engine, nil
 }
 

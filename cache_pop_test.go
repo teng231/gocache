@@ -346,36 +346,57 @@ func TestRWConcurentPopGetHashCore(t *testing.T) {
 
 func TestPopExpired2(t *testing.T) {
 	engine, err := New(&Config{
-		TTL:         1 * time.Second,
-		CleanWindow: 100 * time.Second,
+		TTL:         10 * time.Second,
+		CleanWindow: 5 * time.Second,
 	})
 	if err != nil {
 		panic(err)
 	}
-	log.Print("okeee")
-
-	for j := 0; j < 100; j++ {
-		engine.Set("key"+strconv.Itoa(j), []byte("value1"+strconv.Itoa(j)))
+	item := map[string]bool{}
+	mt := &sync.Mutex{}
+	for i := 0; i < 4; i++ {
+		go func() {
+			for {
+				key, _, err := engine.Pop()
+				if err != nil {
+					log.Print(err)
+					time.Sleep(400 * time.Millisecond)
+					continue
+				}
+				mt.Lock()
+				if item[key] {
+					log.Fatal("duplicated ", key)
+				}
+				log.Print("pop ", key)
+				item[key] = true
+				mt.Unlock()
+				time.Sleep(200 * time.Millisecond)
+			}
+		}()
 	}
-	time.Sleep(500 * time.Millisecond)
-	// engine.CleanWindow(nil)
-	log.Print("++++0 :", engine.Keys())
-
-	for j := 50; j < 120; j++ {
-		engine.Set("key"+strconv.Itoa(j), []byte("value1"+strconv.Itoa(j)))
+	time.Sleep(100 * time.Millisecond)
+	log.Print("Thêm vào 50 phần tử")
+	for j := 0; j < 50; j++ {
+		key := "key" + strconv.Itoa(j)
+		if item[key] {
+			continue
+		}
+		engine.Set(key, []byte("value1"+strconv.Itoa(j)))
 	}
-	log.Print("+++++1 :", engine.Keys())
-	time.Sleep(1005 * time.Millisecond)
-	log.Print("-----------------")
-	engine.CleanWindow(nil)
-	log.Print("+++++2 :", engine.Keys())
-
-	for i := 0; i < 100; i++ {
-		key, data, err := engine.Pop()
-		log.Print(key, err, string(data))
-		// engine.Info()
+	log.Print("Thêm done 50 phần tử")
+	time.Sleep(1 * time.Second)
+	log.Print("Thêm vào 50 phần tử 2")
+	for j := 10; j < 60; j++ {
+		key := "key" + strconv.Itoa(j)
+		if item[key] {
+			continue
+		}
+		engine.Set(key, []byte("value1"+strconv.Itoa(j)))
 	}
+	log.Print("Thêm done 50 phần tử 2")
+
 	log.Print(engine.Keys())
+	time.Sleep(20 * time.Second)
 }
 
 func TestTime(t *testing.T) {

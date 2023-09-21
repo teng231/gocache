@@ -96,9 +96,6 @@ func TestRWConcurentGetSetHashCore(t *testing.T) {
 		panic(err)
 	}
 	log.Print("okeee")
-	// for i := 0; i < 1000000; i++ {
-	// 	engine.Set([]byte("key"+strconv.Itoa(i)), []byte("value1"+strconv.Itoa(i)))
-	// }
 	now := time.Now()
 	// log.Print(engine.Len(), " ")
 	buf := make(chan string, 10000)
