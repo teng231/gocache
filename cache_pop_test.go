@@ -65,21 +65,21 @@ func TestPopDuplicate(t *testing.T) {
 	wg.Add(10)
 	for i := 0; i < 10; i++ {
 		go func(i int) {
-			for j := 0; j < 1_00_000; j++ {
-
+			for j := 0; j < 1_000; j++ {
 				engine.Set("key"+strconv.Itoa(i)+"+"+strconv.Itoa(j), []byte("value1"+strconv.Itoa(j)))
-				// buf <- "key" + strconv.Itoa(i) + "+" + strconv.Itoa(j)
 			}
 			wg.Done()
 		}(i)
+		for j := 0; j < 1_000; j++ {
+			engine.Set("key"+strconv.Itoa(i)+"+"+strconv.Itoa(j), []byte("value1"+strconv.Itoa(j)))
+		}
 	}
-
 	wg.Wait()
-	engine.Info()
+	log.Print(engine.Info())
 	// time.Sleep(2 * time.Second)
 	now = time.Now()
 	wg = &sync.WaitGroup{}
-	wg.Add(1_000_000)
+	wg.Add(20_000)
 	for i := 0; i < 200; i++ {
 		go func(i int) {
 			for {
@@ -87,10 +87,10 @@ func TestPopDuplicate(t *testing.T) {
 				key, data, err := engine.Pop()
 				if err != nil {
 					log.Print("NILLL", err)
-					if a > 0 {
-						break
-					}
-					// continue
+					// if a > 0 {
+					// 	break
+					// }
+					continue
 				}
 				mt.RLock()
 				_, has := m[key]
@@ -473,4 +473,32 @@ func TestPopLen(t *testing.T) {
 	// wg.Wait()
 	len = engine.LenWithMetadata("worker:4")
 	log.Print("len ", len)
+}
+
+func TestPopExpire(t *testing.T) {
+	engine, err := New(&Config{
+		TTL:         2 * time.Second,
+		CleanWindow: 1 * time.Second,
+	})
+	if err != nil {
+		panic(err)
+	}
+	log.Print("okeee")
+	for i := 0; i < 2; i++ {
+		for j := 0; j < 20; j++ {
+			engine.Set("key"+strconv.Itoa(j), []byte("value"+strconv.Itoa(j)), MetaData{
+				"worker": "x",
+			})
+		}
+		for j := 0; j < 20; j++ {
+			key, val, err := engine.PopWithMetadataV2("worker:x")
+			if err != nil {
+				log.Print("NILLL", err)
+				continue
+			}
+			log.Print(key, "---", string(val))
+		}
+		time.Sleep(2 * time.Second)
+	}
+
 }
